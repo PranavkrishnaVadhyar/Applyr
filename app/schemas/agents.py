@@ -8,4 +8,7 @@ import chromadb
 def create_content_writer_tool():
     pass
 
-def 
+def create_details_retriver_tool():
+    pass
+
+
