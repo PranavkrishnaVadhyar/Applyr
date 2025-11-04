@@ -1,7 +1,7 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import APIRouter
 
 user_router = APIRouter(tags=["users"])
 
-user_router.get('/hello')
+@user_router.get('/hello')
 def hello():
     return "Hello!"

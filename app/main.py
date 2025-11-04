@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 #from database.database import engine, Base
-from app.routes import auth, agents, users
+from routes import auth, agents, users
+import uvicorn
 
 # Create database tables
 #Base.metadata.create_all(bind=engine)
@@ -35,3 +36,9 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "agent-api"}
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+    )

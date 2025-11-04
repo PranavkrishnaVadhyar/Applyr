@@ -1,6 +1,7 @@
 import chromadb
 import chromadb.utils.embedding_functions as embedding_functions
 from dotenv import load_dotenv
+from langchain.core 
 
 load_dotenv()
 
@@ -23,8 +24,8 @@ def setup_chroma():
     print("Collection Created!")
 
 
-def add_resume()
-
+def add_resume():
+    pass
 
 if __name__ == '__main__':
     setup_chroma()
