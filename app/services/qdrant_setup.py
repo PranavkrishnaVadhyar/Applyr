@@ -5,7 +5,12 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from sentence_transformers import SentenceTransformer
+from qdrant_client.models import Distance, VectorParams, PointStruct, PayloadSchemaType
 import uuid
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 class ResumeVectorStore:
@@ -40,6 +45,17 @@ class ResumeVectorStore:
             
             if collection_exists:
                 print(f"Collection '{self.collection_name}' already exists. Using existing collection.")
+                # Create index on user_id if it doesn't exist
+                try:
+                    self.client.create_payload_index(
+                        collection_name=self.collection_name,
+                        field_name="metadata.user_id",
+                        field_schema=PayloadSchemaType.KEYWORD
+                    )
+                    print("Created index on metadata.user_id")
+                except Exception as e:
+                    # Index might already exist, which is fine
+                    print(f"Index on metadata.user_id: {e}")
                 return True
             
             # Create new collection
@@ -51,6 +67,15 @@ class ResumeVectorStore:
                 )
             )
             print(f"Collection '{self.collection_name}' created successfully.")
+            
+            # Create payload index for user_id filtering
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="metadata.user_id",
+                field_schema=PayloadSchemaType.KEYWORD
+            )
+            print("Created index on metadata.user_id for efficient filtering.")
+            
             return True
             
         except Exception as e:
@@ -148,27 +173,31 @@ class ResumeVectorStore:
             List of search results
         """
         try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            
             query_vector = self.embedding_model.encode(query).tolist()
             
-            search_filter = None
+            query_filter = None
             if user_id:
-                search_filter = {
-                    "must": [
-                        {
-                            "key": "metadata.user_id",
-                            "match": {"value": user_id}
-                        }
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="metadata.user_id",
+                            match=MatchValue(value=user_id)
+                        )
                     ]
-                }
+                )
             
-            results = self.client.search(
+            # Use query_points instead of deprecated search method
+            results = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit,
-                query_filter=search_filter
+                query_filter=query_filter,
+                with_payload=True
             )
             
-            return results
+            return results.points
             
         except Exception as e:
             print(f"Error searching: {e}")
@@ -198,12 +227,12 @@ if __name__ == "__main__":
     )
     
     # Optional: Search example
-    # results = resume_store.search_resume(
-    #     query="Python developer with machine learning experience",
-    #     user_id="user_12345"
-    # )
-    # for result in results:
-    #     print(f"Score: {result.score}")
-    #     print(f"Text: {result.payload['text'][:200]}...")
-    #     print(f"Metadata: {result.payload['metadata']}")
-    #     print("---")
+    results = resume_store.search_resume(
+        query="Python developer with machine learning experience",
+        user_id="user_12345"
+    )
+    for result in results:
+        print(f"Score: {result.score}")
+        print(f"Text: {result.payload['text'][:200]}...")
+        print(f"Metadata: {result.payload['metadata']}")
+        print("---")
