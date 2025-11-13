@@ -1,127 +1,135 @@
+# agent_service.py
 import os
 import json
-from typing import Dict, List, Optional
-from langchain_groq import ChatGroq
-from langchain_classic.agents import create_react_agent, AgentExecutor
-from langchain_classic.tools import tool
-from langchain_classic.prompts import PromptTemplate
-from dotenv import load_dotenv
-from qdrant_setup import ResumeVectorStore
-from langchain_classic.output_parsers import ResponseSchema, StructuredOutputParser
+import asyncio
+from typing import Dict
 
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+
+# Import DB initializer
+from create_table import initialize_database
+
+
+# ============================
+#   ENVIRONMENT VARIABLES
+# ============================
 load_dotenv()
 
-# Initialize the vector store globally
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-QDRANT_ENDPOINT = os.getenv("QDRANT_ENDPOINT")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    raise ValueError("❌ GOOGLE_API_KEY missing in .env")
 
-resume_store = ResumeVectorStore(
-    api_key=QDRANT_API_KEY,
-    endpoint=QDRANT_ENDPOINT,
-    collection_name="user_resumes"
+
+# ============================
+#   ENSURE DATABASE EXISTS
+# ============================
+initialize_database()
+
+DB_PATH = "./resumes.db"
+
+
+# ============================
+#   LLM (Gemini)
+# ============================
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    temperature=0.3,
+    google_api_key=GOOGLE_API_KEY
 )
 
 
-@tool
-def search_resume(query: str, user_id: str = "") -> str:
-    """Search through resume content to find relevant information."""
-    uid = user_id if user_id else None
-    results = resume_store.search_resume(query=query, user_id=uid, limit=5)
-    
-    if not results:
-        return "No relevant resume information found."
-    
-    response = ""
-    for i, result in enumerate(results, 1):
-        user_id_info = result.payload.get("metadata", {}).get("user_id", "Unknown")
-        text = result.payload.get("text", "")
-        score = result.score
-        
-        response += f"[Result {i}] (Relevance: {score:.2f}, User: {user_id_info})\n{text}\n\n"
-    
-    return response.strip()
+# ============================
+#   SQL TOOLKIT (Tools Only)
+# ============================
+engine = create_engine(f"sqlite:///{DB_PATH}")
+db = SQLDatabase(engine)
+
+toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+sql_tools = toolkit.get_tools()
 
 
-def create_resume_agent():
-    """Create and return a LangChain agent with Groq LLM and resume search tool."""
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.3,
-        api_key=os.getenv("GROQ_API_KEY")
-    )
+# ============================
+#   ENABLE LLM TOOL CALLING
+# ============================
+llm_with_tools = llm.bind_tools(sql_tools)
 
-    tools = [search_resume]
 
-    template = """You are a helpful assistant that answers questions about resumes.
+# ============================
+#   MULTI-QUESTION RUNNER
+# ============================
+async def answer_sql_questions(user_id: str, questions: str) -> Dict[str, str]:
+    question_list = [q.strip() for q in questions.split("\n") if q.strip()]
 
-You have access to the following tools:
+    async def process(q):
+        prompt = f"""
+You are a resume analysis assistant with access to SQL tools.
 
-{tools}
+Below is the database schema you MUST use:
 
-Use the following format:
+TABLE resumes (
+    user_id TEXT PRIMARY KEY,
+    name TEXT,
+    skills TEXT,
+    experience TEXT,
+    knowledge TEXT,
+    education TEXT,
+    projects TEXT,
+    certifications TEXT
+);
 
-Question: the input question you must answer
-Thought: think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Observation can repeat)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
+User ID: {user_id}
+Question: {q}
 
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}
+You MUST:
+- Use SQL tools to answer the question.
+- Only use SQL queries based on the schema above.
+- Never guess column names or data.
+- Query only rows WHERE user_id = '{user_id}' unless asked otherwise.
+- If a question cannot be answered from the table, say so.
 """
 
-    prompt = PromptTemplate.from_template(template)
-    agent = create_react_agent(llm, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False, handle_parsing_errors=True)
-    return agent_executor
+
+        # First pass: LLM decides tool usage
+        result = await llm_with_tools.ainvoke(prompt)
+
+        # If LLM used a tool
+        if result.tool_calls:
+            tool_call = result.tool_calls[0]
+            tool = next(t for t in sql_tools if t.name == tool_call["name"])
+
+            # Run the SQL query
+            sql_output = tool.invoke(tool_call["args"])
+
+            # Final LLM answer after tool result
+            final_response = llm.invoke(
+                f"SQL result: {sql_output}\n\nAnswer the question: {q}"
+            )
+            return q, final_response.content
+
+        # If no tool call
+        return q, result.content
+
+    results = await asyncio.gather(*(process(q) for q in question_list))
+    return dict(results)
 
 
-def answer_job_questions(agent, questions: str, user_id: Optional[str] = "") -> Dict[str, str]:
-    """Split multiple questions and return JSON answers for each."""
-    
-    # Split questions line-by-line or numbered
-    question_list = [
-        q.strip() for q in questions.split("\n") 
-        if q.strip() and not q.strip().lower().startswith("q")
-    ]
-
-    answers = {}
-    for q in question_list:
-        query = f"{q} (user_id: {user_id})" if user_id else q
-        try:
-            response = agent.invoke({"input": query})
-            answers[q] = response.get("output", "No response generated.")
-        except Exception as e:
-            answers[q] = f"Error: {str(e)}"
-
-    return answers
-
-
-# Example Usage
+# ============================
+#   EXAMPLE USAGE
+# ============================
 if __name__ == "__main__":
-    if not os.getenv("GROQ_API_KEY"):
-        print("ERROR: Set GROQ_API_KEY environment variable")
-        exit(1)
-
-    print("Initializing Resume QA Agent...\n")
-    agent = create_resume_agent()
-    print("✓ Agent ready!\n")
-
     job_questions = """
-    1. What programming languages does user_12345 know?
-    2. What is their highest qualification?
-    3. Describe their experience with NLP.
-    4. What projects have they worked on recently?
-    5. Does the candidate have experience with Flask or FastAPI?
+    What programming languages does user_12345 know?
+    Describe their NLP experience.
+    What projects have they done?
+    What certifications do they have?
     """
 
-    print("Answering job application questions...\n")
-    result_json = answer_job_questions(agent, job_questions, user_id="user_12345")
+    print("\n🚀 Running SQL-powered Gemini LLM Tool Calling...\n")
 
-    # Format as structured JSON
-    print(json.dumps(result_json, indent=4))
+    answers = asyncio.run(answer_sql_questions("user_12345", job_questions))
+    print(json.dumps(answers, indent=4))
