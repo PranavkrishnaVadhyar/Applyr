@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 #from database.database import engine, Base
 from routes import auth, agents, users
 import uvicorn
+from db.database import engine
+from db.models import Users, Resume
+
+
 
 # Create database tables
 #Base.metadata.create_all(bind=engine)
@@ -23,8 +27,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+Users.metadata.create_all(bind=engine)
+Resume.metadata.create_all(bind=engine)
 # Include routers
-# app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
+app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.user_router, prefix="/api/users", tags=["users"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 # app.include_router(tools.router, prefix="/api/tools", tags=["tools"])
