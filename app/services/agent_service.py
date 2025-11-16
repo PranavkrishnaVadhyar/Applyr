@@ -12,7 +12,7 @@ from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 
 # Import DB initializer
-from services.create_table import initialize_database
+from db.create_table import initialize_database
 
 
 # ============================
