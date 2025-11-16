@@ -1,14 +1,34 @@
-from langchain.tools import Tool
-from langgraph.prebuilt import create_react_agent
-import chromadb
+# schemas/resume.py
+from pydantic import BaseModel
+from typing import Optional, Union, List
+
+# =============================
+#   REQUEST MODEL
+# =============================
+class QuestionRequest(BaseModel):
+    user_id: str
+    questions: Union[str, List[str]]
+
+class ResumeBase(BaseModel):
+    skills: Optional[str] = None
+    experience: Optional[str] = None
+    knowledge: Optional[str] = None
+    education: Optional[str] = None
+    projects: Optional[str] = None
+    certifications: Optional[str] = None
 
 
-
-
-def create_content_writer_tool():
+class ResumeCreate(ResumeBase):
     pass
 
-def create_details_retriver_tool():
+
+class ResumeUpdate(ResumeBase):
     pass
 
 
+class ResumeOut(ResumeBase):
+    id: int
+    user_id: int
+
+    class Config:
+        orm_mode = True
