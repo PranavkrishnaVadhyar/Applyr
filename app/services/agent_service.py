@@ -18,10 +18,12 @@ from fastapi import HTTPException
 from db.models import Resume, Users
 from schemas.agents import ResumeCreate, ResumeUpdate
 
+import os
+from llama_cloud_services import LlamaExtract
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from db.models import Resume, Users
 
-# ============================
-#   ENVIRONMENT VARIABLES
-# ============================
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -29,17 +31,12 @@ if not GOOGLE_API_KEY:
     raise ValueError("❌ GOOGLE_API_KEY missing in .env")
 
 
-# ============================
-#   ENSURE DATABASE EXISTS
-# ============================
+
 initialize_database()
 
 DB_PATH = "./resumes.db"
 
 
-# ============================
-#   LLM (Gemini)
-# ============================
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.0-flash",
     temperature=0.3,
@@ -47,9 +44,6 @@ llm = ChatGoogleGenerativeAI(
 )
 
 
-# ============================
-#   SQL TOOLKIT (Tools Only)
-# ============================
 engine = create_engine(f"sqlite:///{DB_PATH}")
 db = SQLDatabase(engine)
 
@@ -57,9 +51,6 @@ toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 sql_tools = toolkit.get_tools()
 
 
-# ============================
-#   ENABLE LLM TOOL CALLING
-# ============================
 llm_with_tools = llm.bind_tools(sql_tools)
 
 
@@ -167,9 +158,58 @@ def delete_resume(db: Session, resume_id: int, user: Users):
     return True
 
 
-# ============================
-#   EXAMPLE USAGE
-# ============================
+
+class ParsedResume(BaseModel):
+    name: str = Field(description="Full name of candidate")
+    email: str = Field(description="Email address")
+    skills: list[str] = Field(description="Technical skills and technologies")
+    experience: str | None = Field(default=None)
+    education: str | None = Field(default=None)
+    projects: str | None = Field(default=None)
+    certifications: str | None = Field(default=None)
+
+
+extractor = LlamaExtract()
+
+
+def parse_and_store_resume(file_path: str, db: Session, user: Users) -> Resume:
+    
+
+    # Create extraction agent
+    agent = extractor.create_agent(
+        name="resume-parser",
+        data_schema=ParsedResume
+    )
+
+    # Run extraction
+    result = agent.extract(file_path)
+
+    if not result or not result.data:
+        raise ValueError("Failed to extract data from resume")
+
+    parsed: ParsedResume = result.data
+
+    # Convert list → comma-separated string
+    skills_str = ", ".join(parsed.skills)
+
+    # Insert into DB
+    resume = Resume(
+        user_id=user.id,
+        skills=skills_str,
+        experience=parsed.experience,
+        knowledge=None,
+        education=parsed.education,
+        projects=parsed.projects,
+        certifications=parsed.certifications
+    )
+
+    db.add(resume)
+    db.commit()
+    db.refresh(resume)
+
+    return resume
+
+
 if __name__ == "__main__":
     job_questions = """
     What programming languages does user_12345 know?
