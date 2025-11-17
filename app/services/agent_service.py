@@ -172,16 +172,31 @@ class ParsedResume(BaseModel):
 extractor = LlamaExtract()
 
 
-def parse_and_store_resume(file_path: str, db: Session, user: Users) -> Resume:
+def get_resume_agent():
+    """Fetch persistent agent; create once if not exists."""
     
+    agents = extractor.list_agents()
+    for a in agents:
+        if a.name == "resume-parser":
+            return a
 
-    # Create extraction agent
-    agent = extractor.create_agent(
+    # Create persistent agent only once
+    return extractor.create_agent(
         name="resume-parser",
         data_schema=ParsedResume
     )
 
-    # Run extraction
+
+def parse_and_store_resume(file_path: str, db: Session, user: Users) -> Resume:
+    """
+    Parse resume PDF using persistent LlamaCloud agent
+    and save extracted data into PostgreSQL.
+    """
+
+    # Use persistent shared agent
+    agent = get_resume_agent()
+
+    # Extract data
     result = agent.extract(file_path)
 
     if not result or not result.data:
@@ -189,10 +204,10 @@ def parse_and_store_resume(file_path: str, db: Session, user: Users) -> Resume:
 
     parsed: ParsedResume = result.data
 
-    # Convert list → comma-separated string
-    skills_str = ", ".join(parsed.skills)
+    # Convert skills list → string
+    skills_str = ", ".join(parsed.skills) if parsed.skills else None
 
-    # Insert into DB
+    # Create DB entry
     resume = Resume(
         user_id=user.id,
         skills=skills_str,
@@ -208,7 +223,6 @@ def parse_and_store_resume(file_path: str, db: Session, user: Users) -> Resume:
     db.refresh(resume)
 
     return resume
-
 
 if __name__ == "__main__":
     job_questions = """
