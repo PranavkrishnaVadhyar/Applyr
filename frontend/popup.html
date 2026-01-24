@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Form Question Extractor</title>
+  <style>
+    body {
+      width: 500px;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+      background: #1f2933;
+      color: #fff;
+    }
+
+    h2 {
+      margin-top: 0;
+      text-align: center;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      font-size: 15px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #4f46e5;
+      color: white;
+    }
+
+    button:hover {
+      background: #4338ca;
+    }
+
+    pre {
+      margin-top: 15px;
+      background: #111827;
+      padding: 12px;
+      border-radius: 6px;
+      max-height: 350px;
+      overflow-y: auto;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h2>Form Question Extractor</h2>
+  <button id="extractBtn">Extract Questions</button>
+  <pre id="output"></pre>
+
+  <script src="popup.js"></script>
+</body>
+</html>

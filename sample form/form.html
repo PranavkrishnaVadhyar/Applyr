@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Application Form</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <form id="applicationForm">
+
+      <!-- Page 1 -->
+      <div class="form-step active">
+        <h2>Personal Information</h2>
+
+        <label>Full Name</label>
+        <input type="text" required />
+
+        <label>Email</label>
+        <input type="email" required />
+
+        <label>Phone</label>
+        <input type="tel" required />
+
+        <button type="button" onclick="nextStep()">Next</button>
+      </div>
+
+      <!-- Page 2 -->
+      <div class="form-step">
+        <h2>Professional Details</h2>
+
+        <label>Highest Qualification</label>
+        <select required>
+          <option value="">Select</option>
+          <option>Bachelor’s</option>
+          <option>Master’s</option>
+          <option>PhD</option>
+        </select>
+
+        <label>Years of Experience</label>
+        <input type="number" min="0" />
+
+        <button type="button" onclick="prevStep()">Back</button>
+        <button type="button" onclick="nextStep()">Next</button>
+      </div>
+
+      <!-- Page 3 -->
+      <div class="form-step">
+        <h2>Screening Questions</h2>
+
+        <label>Are you familiar with AI/ML?</label>
+        <div class="radio-group">
+          <label><input type="radio" name="ai" /> Yes</label>
+          <label><input type="radio" name="ai" /> No</label>
+        </div>
+
+        <label>Preferred Work Mode</label>
+        <div class="radio-group">
+          <label><input type="radio" name="mode" /> Remote</label>
+          <label><input type="radio" name="mode" /> Hybrid</label>
+          <label><input type="radio" name="mode" /> Onsite</label>
+        </div>
+
+        <button type="button" onclick="prevStep()">Back</button>
+        <button type="button" onclick="nextStep()">Next</button>
+      </div>
+
+     <!-- Page 4 -->
+     <div class="form-step">
+       <h2>Descriptive Questions</h2>
+     
+       <label>
+         1. Describe an AI/ML project you have worked on. 
+         Include the problem, approach, and outcome.
+       </label>
+       <textarea rows="4" placeholder="Your answer..."></textarea>
+     
+       <label>
+         2. How would you design an AI-based resume screening system 
+         using a job description?
+       </label>
+       <textarea rows="4" placeholder="Your answer..."></textarea>
+     
+       <label>
+         3. What technical challenges have you faced while working 
+         with LLMs or APIs, and how did you overcome them?
+       </label>
+       <textarea rows="4" placeholder="Your answer..."></textarea>
+     
+       <button type="button" onclick="prevStep()">Back</button>
+       <button type="button" onclick="nextStep()">Next</button>
+     </div>
+     
+     
+      <!-- Page 4 -->
+      <div class="form-step">
+        <h2>Skills</h2>
+
+        <label>Select your skills</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" /> Python</label>
+          <label><input type="checkbox" /> FastAPI</label>
+          <label><input type="checkbox" /> LangChain</label>
+          <label><input type="checkbox" /> SQL</label>
+        </div>
+
+        <button type="button" onclick="prevStep()">Back</button>
+        <button type="submit">Submit Application</button>
+      </div>
+
+    </form>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
