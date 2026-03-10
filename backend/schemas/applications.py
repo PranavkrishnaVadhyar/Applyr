@@ -32,17 +32,17 @@ class ApplicationCreate(BaseModel):
 class ApplicationResponse(BaseModel):
     id: UUID
     user_id: UUID
-    resume_id: Optional[UUID]
+    resume_id: Optional[UUID] = None
     job_role: str
     job_description: str
     company_name: str
-    company_description: Optional[str]
-    final_date: Optional[date]
-    response: Optional[Dict]
+    company_description: Optional[str] = None
+    final_date: Optional[date] = None
+    response: Optional[Dict] = None
     status: str
-    applied_at: Optional[datetime]
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
+    applied_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 

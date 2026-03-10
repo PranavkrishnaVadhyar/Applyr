@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from uuid import UUID, uuid4
 from typing import List
-
+import uuid
 from db.database import supabase
 from schemas.applications import (
     ApplicationCreate,
@@ -12,9 +12,17 @@ from schemas.applications import (
 router = APIRouter()
 
 
+def serialize_uuid(data: dict):
+    for key, value in data.items():
+        if isinstance(value, uuid.UUID):
+            data[key] = str(value)
+    return data
+
+
 @router.post("/", response_model=ApplicationResponse)
 async def create_application(payload: ApplicationCreate):
-    data = payload.model_dump()
+
+    data = payload.model_dump(mode="json")
     data["id"] = str(uuid4())
 
     response = supabase.table("applications").insert(data).execute()
@@ -33,7 +41,7 @@ async def get_user_applications(user_id: UUID):
         .table("applications")
         .select("*")
         .eq("user_id", str(user_id))
-        .order("created_at", desc=True)
+        .order("applied_at", desc=True)
         .execute()
     )
 
