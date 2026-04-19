@@ -16,6 +16,12 @@ class ApplicationExtract(BaseModel):
         description="Last application date if mentioned"
     )
 
+class ExtensionExtractionRequest(BaseModel):
+    user_id: UUID
+    text: str
+
+
+
 
 class ApplicationCreate(BaseModel):
     user_id: UUID

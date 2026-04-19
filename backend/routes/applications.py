@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from uuid import UUID, uuid4
 from typing import List
 import uuid
@@ -7,7 +7,10 @@ from schemas.applications import (
     ApplicationCreate,
     ApplicationUpdate,
     ApplicationResponse,
+    ExtensionExtractionRequest
 )
+from core.application_mgmt import extract_application_fields, create_application as core_create_application
+from core.security import get_current_user
 
 router = APIRouter()
 
@@ -20,10 +23,16 @@ def serialize_uuid(data: dict):
 
 
 @router.post("/", response_model=ApplicationResponse)
-async def create_application(payload: ApplicationCreate):
+async def create_application(
+    payload: ApplicationCreate,
+    current_user: UUID = Depends(get_current_user)
+):
 
     data = payload.model_dump(mode="json")
     data["id"] = str(uuid4())
+    # Ensure the user_id in the payload matches the current_user if necessary,
+    # or override depending on your requirements.
+    data["user_id"] = str(current_user)
 
     response = supabase.table("applications").insert(data).execute()
 
@@ -33,9 +42,29 @@ async def create_application(payload: ApplicationCreate):
     return response.data[0]
 
 
+@router.post("/extract", response_model=ApplicationResponse)
+async def extract_and_create_application(payload: ExtensionExtractionRequest):
+    try:
+        extracted_data = await extract_application_fields(payload.text)
+        
+        application = await core_create_application(
+            user_id=payload.user_id,
+            extracted=extracted_data
+        )
+        return application
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+
+
 # ✅ READ ALL (for a user)
 @router.get("/user/{user_id}", response_model=List[ApplicationResponse])
-async def get_user_applications(user_id: UUID):
+async def get_user_applications(
+    user_id: UUID,
+    current_user: UUID = Depends(get_current_user)
+):
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Not authorized to access these applications")
+
     response = (
         supabase
         .table("applications")
@@ -50,12 +79,16 @@ async def get_user_applications(user_id: UUID):
 
 # ✅ READ ONE
 @router.get("/{application_id}", response_model=ApplicationResponse)
-async def get_application(application_id: UUID):
+async def get_application(
+    application_id: UUID,
+    current_user: UUID = Depends(get_current_user)
+):
     response = (
         supabase
         .table("applications")
         .select("*")
         .eq("id", str(application_id))
+        .eq("user_id", str(current_user)) # Added security check
         .single()
         .execute()
     )
@@ -68,7 +101,11 @@ async def get_application(application_id: UUID):
 
 # ✅ UPDATE
 @router.put("/{application_id}", response_model=ApplicationResponse)
-async def update_application(application_id: UUID, payload: ApplicationUpdate):
+async def update_application(
+    application_id: UUID,
+    payload: ApplicationUpdate,
+    current_user: UUID = Depends(get_current_user)
+):
     update_data = payload.model_dump(exclude_unset=True)
 
     response = (
@@ -76,6 +113,7 @@ async def update_application(application_id: UUID, payload: ApplicationUpdate):
         .table("applications")
         .update(update_data)
         .eq("id", str(application_id))
+        .eq("user_id", str(current_user)) # Added security check
         .execute()
     )
 
@@ -87,12 +125,16 @@ async def update_application(application_id: UUID, payload: ApplicationUpdate):
 
 # ✅ DELETE
 @router.delete("/{application_id}")
-async def delete_application(application_id: UUID):
+async def delete_application(
+    application_id: UUID,
+    current_user: UUID = Depends(get_current_user)
+):
     response = (
         supabase
         .table("applications")
         .delete()
         .eq("id", str(application_id))
+        .eq("user_id", str(current_user)) # Added security check
         .execute()
     )
 

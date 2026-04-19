@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Job Details</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <div id="job-details"></div>
+
+    <script src="jobs.js"></script>
+
+    <script>
+
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get("id");
+
+        const job = jobs.find(j => j.id == id);
+
+        document.getElementById("job-details").innerHTML = `
+<h1>${job.title}</h1>
+<p><strong>Company:</strong> ${job.company}</p>
+<p><strong>Location:</strong> ${job.location}</p>
+<p><strong>Deadline:</strong> ${job.deadline}</p>
+
+<h3>Job Description</h3>
+<p>${job.description}</p>
+<br>
+<a href="apply.html?id=${job.id}">
+    <button>Apply Now</button>
+</a>
+`;
+
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Apply for Job</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <h2 id="job-title-header">Application Form</h2>
+
+    <form id="application-form" onsubmit="event.preventDefault(); alert('Application Submitted!'); window.location.href='index.html';">
+
+        <label>Full Name</label>
+        <input type="text" placeholder="Enter your name" required>
+
+        <label>Email</label>
+        <input type="email" required>
+
+        <label>Why do you want this role?</label>
+        <textarea rows="4"></textarea>
+
+        <label>Describe your relevant experience</label>
+        <textarea rows="6"></textarea>
+
+        <label>Years of Experience</label>
+        <select>
+            <option>0-1</option>
+            <option>1-3</option>
+            <option>3-5</option>
+            <option>5+</option>
+        </select>
+
+        <label>Preferred Work Type</label>
+        <div>
+            <input type="radio" name="work"> Remote
+            <input type="radio" name="work"> Hybrid
+            <input type="radio" name="work"> Onsite
+        </div>
+
+        <label>Skills</label>
+        <div>
+            <input type="checkbox"> Python
+            <input type="checkbox"> Machine Learning
+            <input type="checkbox"> System Design
+            <input type="checkbox"> APIs
+        </div>
+
+        <label>Upload Resume</label>
+        <input type="file">
+
+        <button type="submit">Submit Application</button>
+
+    </form>
+
+    <script src="jobs.js"></script>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get("id");
+        const job = jobs.find(j => j.id == id);
+        
+        if (job) {
+            document.getElementById("job-title-header").innerText = `Application form for ${job.title}`;
+        }
+    </script>
+</body>
+
+</html>

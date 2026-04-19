@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from routes import applications, auth
+from routes import applications, auth, analytics
 
 
 # Initialize FastAPI app
@@ -27,6 +27,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 # app.include_router(users.user_router, prefix="/api/users", tags=["users"])
 # app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(applications.router, prefix="/api/applications", tags=["applications"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 
 
 @app.get("/")

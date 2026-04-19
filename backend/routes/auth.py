@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from db.database import supabase
+from core.security import get_current_user
+from uuid import UUID
 
 router = APIRouter()
 
@@ -75,3 +77,35 @@ async def signin(payload: LoginRequest):
         "refresh_token": response.session.refresh_token,
         "user_id": user_id
     }
+
+@router.get("/me")
+async def get_me(current_user: UUID = Depends(get_current_user)):
+    response = (
+        supabase
+        .table("users")
+        .select("*")
+        .eq("id", str(current_user))
+        .single()
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    return response.data
+
+
+@router.post("/logout")
+async def logout():
+    """
+    Signs out the user by clearing the session in Supabase.
+    """
+    try:
+        # We try to sign out, but if it fails (e.g. no active session on shared client), 
+        # we still want the frontend to proceed with clearing local tokens.
+        supabase.auth.sign_out()
+    except Exception as e:
+        print(f"Supabase sign_out error: {e}")
+        # We don't necessarily want to block logout if the server-side sign_out fails
+    
+    return {"message": "Logged out successfully"}

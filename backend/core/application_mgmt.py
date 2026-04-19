@@ -3,17 +3,14 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 from schemas.applications import ApplicationExtract
 import os
-from sqlalchemy.ext.asyncio import AsyncSession
-from db.models import Application
 from uuid import UUID
-from uuid import uuid4, UUID
+from uuid import uuid4
 from db.database import supabase
-from schemas.applications import ApplicationExtract
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 llm = ChatGroq(
-    model="llama3-70b-8192",
+    model="llama-3.3-70b-versatile",
     temperature=0,
     groq_api_key=GROQ_API_KEY
 )

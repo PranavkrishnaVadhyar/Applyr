@@ -1,21 +1,22 @@
-let currentStep = 0;
-const steps = document.querySelectorAll(".form-step");
+const container = document.getElementById("jobs-container");
 
-function showStep(index) {
-  steps.forEach(step => step.classList.remove("active"));
-  steps[index].classList.add("active");
-}
+jobs.forEach(job => {
 
-function nextStep() {
-  if (currentStep < steps.length - 1) {
-    currentStep++;
-    showStep(currentStep);
-  }
-}
+  const div = document.createElement("div");
 
-function prevStep() {
-  if (currentStep > 0) {
-    currentStep--;
-    showStep(currentStep);
-  }
-}
+  div.className = "job-card";
+
+  div.innerHTML = `
+<h2>${job.title}</h2>
+<p><strong>Company:</strong> ${job.company}</p>
+<p><strong>Location:</strong> ${job.location}</p>
+<p><strong>Deadline:</strong> ${job.deadline}</p>
+
+<a href="job.html?id=${job.id}">
+<button>View Job</button>
+</a>
+`;
+
+  container.appendChild(div);
+
+});
