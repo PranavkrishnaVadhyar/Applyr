@@ -7,9 +7,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
   ArrowRight, Zap, Target, Rocket,
-  CheckCircle, Shield, BarChart3, Globe, Sun, Moon,
+  CheckCircle, Shield, BarChart3, Globe,
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
 
 import { AINetworkBackground }  from '@/components/landing/ai-network'
 import { AutoApplyDemo }        from '@/components/landing/auto-apply-demo'
@@ -36,7 +35,6 @@ const PRICING = [
 export default function Home() {
   const { isAuthenticated, loading } = useAuth()
   const router   = useRouter()
-  const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -54,10 +52,10 @@ export default function Home() {
     )
   }
 
-  const logoSrc = theme === 'dark' ? '/logo-dark.PNG' : '/logo-light.PNG'
+  const logoSrc = '/logo-dark.PNG'
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/10">
+    <div className="dark min-h-screen bg-background text-foreground selection:bg-primary/10">
 
       {/* ── Navbar ────────────────────────────────────────────────────────── */}
       <nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40 transition-all duration-300">
@@ -66,13 +64,6 @@ export default function Home() {
             <img src={logoSrc} alt="Applyr" className="h-8 w-auto object-contain transition-all" />
           </Link>
           <div className="flex items-center gap-2 md:gap-4">
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 rounded-full hover:bg-secondary transition-colors"
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
             <Link href="/auth/login" className="hidden sm:block">
               <Button variant="ghost" className="text-sm font-medium">Sign In</Button>
             </Link>
@@ -324,7 +315,7 @@ export default function Home() {
         <section className="py-24 px-6">
           <div
             className="max-w-4xl mx-auto text-center space-y-8 rounded-3xl p-12 md:p-20 border border-primary/30 bg-card/80 backdrop-blur-md animate-reveal"
-            style={{ boxShadow: 'var(--shadow-neon)' }}
+            style={{ boxShadow: '0 0 40px -10px rgba(26,255,92,0.15)' }}
           >
             <h2 className="text-4xl md:text-5xl font-semibold tracking-tight text-foreground">
               Ready to start applying?
