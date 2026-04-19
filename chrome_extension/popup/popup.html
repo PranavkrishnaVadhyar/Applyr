@@ -1,32 +1,72 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<link rel="stylesheet" href="popup.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
 </head>
-
 <body>
 
-<h2>Applyr Extractor</h2>
+  <!-- Header -->
+  <div class="header">
+    <h1 class="header-title">Applyr</h1>
+    <span class="header-badge">Extractor</span>
+  </div>
 
-<button id="extractBtn">Extract Job</button>
+  <!-- Main action -->
+  <button id="extractBtn" class="btn-primary">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+    </svg>
+    Extract Job
+  </button>
 
-<div id="result">
+  <!-- Status message -->
+  <div id="statusMsg" class="status-msg hidden"></div>
 
-<h3>Title</h3>
-<p id="title"></p>
+  <!-- Results section — only shown after backend response -->
+  <div id="result" class="result-section hidden">
 
-<h3>Company</h3>
-<p id="company"></p>
+    <div class="result-card">
+      <div class="result-field">
+        <span class="field-label">Job Role</span>
+        <p id="jobRole" class="field-value"></p>
+      </div>
 
-<h3>Deadline</h3>
-<p id="deadline"></p>
+      <div class="result-field">
+        <span class="field-label">Job Description</span>
+        <pre id="jobDescription" class="field-value description-text"></pre>
+      </div>
 
-<h3>Description</h3>
-<pre id="description"></pre>
+      <div class="result-field">
+        <span class="field-label">Company</span>
+        <p id="companyName" class="field-value"></p>
+      </div>
 
-</div>
+      <div class="result-field">
+        <span class="field-label">Company Description</span>
+        <pre id="companyDescription" class="field-value description-text"></pre>
+      </div>
 
-<script src="popup.js"></script>
+      <div class="result-field">
+        <span class="field-label">Last Date</span>
+        <p id="finalDate" class="field-value"></p>
+      </div>
+
+      <div class="result-field">
+        <span class="field-label">Status</span>
+        <p id="status" class="field-value">
+          <span id="statusBadge" class="status-badge"></span>
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
 
 </body>
 </html>

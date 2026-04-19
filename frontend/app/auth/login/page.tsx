@@ -60,7 +60,7 @@ export default function LoginPage() {
             id="email"
             type="email"
             placeholder="you@example.com"
-            className="input-dark"
+            className="w-full"
             {...register('email')}
           />
           {errors.email && (
@@ -76,7 +76,7 @@ export default function LoginPage() {
             id="password"
             type="password"
             placeholder="••••••••"
-            className="input-dark"
+            className="w-full"
             {...register('password')}
           />
           {errors.password && (
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
         <Button
           type="submit"
-          className="w-full button-neon"
+          className="w-full bg-primary text-primary-foreground hover:brightness-95"
           disabled={isLoading}
         >
           {isLoading ? (

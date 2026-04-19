@@ -1,20 +1,221 @@
-body{
-font-family: Arial;
-width:350px;
-padding:10px;
+/* ─── Reset & Base ─────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-button{
-background:#4CAF50;
-color:white;
-border:none;
-padding:10px;
-cursor:pointer;
-margin-bottom:10px;
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  width: 380px;
+  background: #0B0F0E;
+  color: #F5F7F6;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-pre{
-white-space:pre-wrap;
-max-height:200px;
-overflow:auto;
+/* ─── Header ───────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(230, 236, 233, 0.12);
+}
+
+.header-title {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #F5F7F6;
+}
+
+.header-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: rgba(26, 255, 92, 0.1);
+  color: #1AFF5C;
+  border: 1px solid rgba(26, 255, 92, 0.2);
+}
+
+/* ─── Primary Button ───────────────────────────────────────────────── */
+.btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: #1AFF5C;
+  color: #0B0F0E;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.btn-primary:hover {
+  filter: brightness(0.9);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary.success {
+  background: rgba(26, 255, 92, 0.15);
+  color: #1AFF5C;
+  border: 1px solid rgba(26, 255, 92, 0.3);
+}
+
+.btn-primary.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* ─── Status Message ───────────────────────────────────────────────── */
+.status-msg {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.status-msg.info {
+  background: rgba(26, 255, 92, 0.08);
+  color: #1AFF5C;
+  border: 1px solid rgba(26, 255, 92, 0.15);
+}
+
+.status-msg.error {
+  background: rgba(239, 68, 68, 0.08);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.hidden {
+  display: none;
+}
+
+/* ─── Results ──────────────────────────────────────────────────────── */
+.result-section {
+  margin-top: 14px;
+}
+
+.result-card {
+  background: #121716;
+  border: 1px solid rgba(230, 236, 233, 0.12);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.result-field {
+  padding: 8px 0;
+}
+
+.result-field + .result-field {
+  border-top: 1px solid rgba(230, 236, 233, 0.08);
+}
+
+.field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8B9491;
+  margin-bottom: 4px;
+}
+
+.field-value {
+  font-size: 13px;
+  color: #F5F7F6;
+  word-break: break-word;
+}
+
+.description-text {
+  font-family: 'Inter', system-ui, sans-serif;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 12px;
+  color: #A0A8A5;
+  line-height: 1.6;
+  padding: 8px 0;
+}
+
+/* Scrollbar styling */
+.description-text::-webkit-scrollbar {
+  width: 4px;
+}
+
+.description-text::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.description-text::-webkit-scrollbar-thumb {
+  background: rgba(230, 236, 233, 0.15);
+  border-radius: 4px;
+}
+
+.description-text::-webkit-scrollbar-thumb:hover {
+  background: rgba(230, 236, 233, 0.25);
+}
+
+/* ─── Loading Skeleton ─────────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.skeleton {
+  background: rgba(230, 236, 233, 0.08);
+  border-radius: 6px;
+  animation: pulse 1.5s ease-in-out infinite;
+  height: 16px;
+  margin-bottom: 6px;
+}
+
+.skeleton.short {
+  width: 60%;
+}
+
+.skeleton.medium {
+  width: 80%;
+}
+
+.skeleton.tall {
+  height: 60px;
+}
+
+/* ─── Status Badge ─────────────────────────────────────────────────── */
+.status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: rgba(26, 255, 92, 0.1);
+  color: #1AFF5C;
+  border: 1px solid rgba(26, 255, 92, 0.2);
 }

@@ -60,7 +60,7 @@ export default function RegisterPage() {
             id="name"
             type="text"
             placeholder="John Doe"
-            className="input-dark"
+            className="w-full"
             {...register('name')}
           />
           {errors.name && (
@@ -76,7 +76,7 @@ export default function RegisterPage() {
             id="email"
             type="email"
             placeholder="you@example.com"
-            className="input-dark"
+            className="w-full"
             {...register('email')}
           />
           {errors.email && (
@@ -92,7 +92,7 @@ export default function RegisterPage() {
             id="password"
             type="password"
             placeholder="••••••••"
-            className="input-dark"
+            className="w-full"
             {...register('password')}
           />
           {errors.password && (
@@ -108,7 +108,7 @@ export default function RegisterPage() {
             id="confirmPassword"
             type="password"
             placeholder="••••••••"
-            className="input-dark"
+            className="w-full"
             {...register('confirmPassword')}
           />
           {errors.confirmPassword && (
@@ -125,7 +125,7 @@ export default function RegisterPage() {
 
         <Button
           type="submit"
-          className="w-full button-neon"
+          className="w-full bg-primary text-primary-foreground hover:brightness-95"
           disabled={isLoading}
         >
           {isLoading ? (

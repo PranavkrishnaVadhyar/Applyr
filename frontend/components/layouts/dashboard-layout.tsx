@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
-import { Menu, X, LogOut, User, BarChart3, FileText, FileCheck, Home, Sun, Moon } from 'lucide-react'
-import { useTheme } from 'next-themes'
+import { Menu, X, LogOut, User, BarChart3, FileText, FileCheck, Home } from 'lucide-react'
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
@@ -20,9 +19,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const { theme, setTheme } = useTheme()
-
-  const logoSrc = theme === 'dark' ? '/logo-dark.PNG' : '/logo-light.PNG'
+  const logoSrc = '/logo-dark.PNG'
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -39,13 +36,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               <img src={logoSrc} alt="Applyr Logo" className="h-8 w-auto object-contain" />
             </Link>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-1.5 rounded-lg hover:bg-secondary transition-colors duration-150 text-muted-foreground hover:text-foreground"
-                aria-label="Toggle theme"
-              >
-                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="lg:hidden text-muted-foreground hover:text-foreground"

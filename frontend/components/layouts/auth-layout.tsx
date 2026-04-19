@@ -21,7 +21,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Form container */}
-        <div className="glass-effect rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6 shadow-soft">
           {children}
         </div>
 
