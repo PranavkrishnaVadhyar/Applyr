@@ -49,6 +49,25 @@ export default function ResumesPage() {
     setDragActive(false)
   }
 
+  const IS_ACTIVE = false; // Flag to enable/disable the page
+
+  if (!IS_ACTIVE) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="font-display text-3xl font-bold text-foreground">Resumes</h1>
+            <p className="text-muted-foreground mt-1">Manage your resume files and versions</p>
+          </div>
+          <Card className="bg-card border border-border flex flex-col items-center justify-center p-12 rounded-xl min-h-[300px]">
+            <h2 className="text-2xl font-bold text-foreground mb-2">Coming Soon</h2>
+            <p className="text-muted-foreground text-center">This feature will be active in the next update.</p>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
