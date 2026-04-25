@@ -1,30 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DashboardLayout } from '@/components/layouts/dashboard-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Save, Plus, X } from 'lucide-react'
-
-const initialProfile = {
-  firstName: 'John',
-  lastName: 'Doe',
-  email: 'john@example.com',
-  phone: '+1 (555) 123-4567',
-  location: 'San Francisco, CA',
-  headline: 'Full Stack Engineer | React & Node.js',
-  bio: 'Passionate about building scalable web applications',
-  skills: ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'AWS'],
-}
+import { Save, Plus, X, Loader2 } from 'lucide-react'
+import { usersApi, UserProfile } from '@/lib/users-api'
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState(initialProfile)
-  const [newSkill, setNewSkill] = useState('')
+  const [profile, setProfile] = useState<Partial<UserProfile>>({})
+  const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [newSkill, setNewSkill] = useState('')
 
-  const handleInputChange = (field: string, value: string) => {
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const data = await usersApi.getMe()
+        setProfile(data)
+      } catch (err: any) {
+        console.error("Failed to fetch profile:", err)
+        setError(err.message || 'Failed to load profile details')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchProfile()
+  }, [])
+
+  const handleInputChange = (field: keyof UserProfile, value: string) => {
     setProfile((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -32,7 +39,7 @@ export default function ProfilePage() {
     if (newSkill.trim()) {
       setProfile((prev) => ({
         ...prev,
-        skills: [...prev.skills, newSkill.trim()],
+        skills: [...(prev.skills || []), newSkill.trim()],
       }))
       setNewSkill('')
     }
@@ -41,14 +48,43 @@ export default function ProfilePage() {
   const handleRemoveSkill = (index: number) => {
     setProfile((prev) => ({
       ...prev,
-      skills: prev.skills.filter((_, i) => i !== index),
+      skills: (prev.skills || []).filter((_, i) => i !== index),
     }))
   }
 
   const handleSave = async () => {
     setIsSaving(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSaving(false)
+    setError(null)
+    try {
+      const updateData = {
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        phone_number: profile.phone_number,
+        location: profile.location,
+        headline: profile.headline,
+        bio: profile.bio,
+        skills: profile.skills || [],
+      }
+      const response = await usersApi.updateMe(updateData)
+      // Update with exact response from server if needed
+      setProfile((prev) => ({ ...prev, ...response.data }))
+      // Optional: Add success toast here
+    } catch (err: any) {
+      console.error("Failed to update profile:", err)
+      setError(err.message || 'Failed to update user profile')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-[80vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -61,10 +97,16 @@ export default function ProfilePage() {
             <p className="text-muted-foreground mt-1">Manage your public profile information</p>
           </div>
           <Button className="bg-primary text-primary-foreground font-medium hover:brightness-95 gap-2" onClick={handleSave} disabled={isSaving}>
-            <Save size={18} />
+            {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>
+
+        {error && (
+          <div className="p-4 bg-destructive/10 text-destructive rounded-md">
+            {error}
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Profile Picture */}
@@ -72,8 +114,10 @@ export default function ProfilePage() {
             <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center mb-4">
               <span className="text-3xl">👤</span>
             </div>
-            <h3 className="font-semibold text-foreground">{profile.firstName} {profile.lastName}</h3>
-            <p className="text-sm text-muted-foreground mt-1">{profile.headline}</p>
+            <h3 className="font-semibold text-foreground">
+              {profile.first_name} {profile.last_name}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">{profile.headline || 'Add a professional headline'}</p>
             <Button variant="outline" className="w-full mt-4">
               Change Photo
             </Button>
@@ -88,36 +132,37 @@ export default function ProfilePage() {
                 <div>
                   <Label className="text-sm font-medium mb-2 block">First Name</Label>
                   <Input
-                    value={profile.firstName}
-                    onChange={(e) => handleInputChange('firstName', e.target.value)}
+                    value={profile.first_name || ''}
+                    onChange={(e) => handleInputChange('first_name', e.target.value)}
                   />
                 </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Last Name</Label>
                   <Input
-                    value={profile.lastName}
-                    onChange={(e) => handleInputChange('lastName', e.target.value)}
+                    value={profile.last_name || ''}
+                    onChange={(e) => handleInputChange('last_name', e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label className="text-sm font-medium mb-2 block">Email</Label>
+                  <Label className="text-sm font-medium mb-2 block">Email (Cannot be changed)</Label>
                   <Input
                     type="email"
-                    value={profile.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    value={profile.email || ''}
+                    disabled
+                    className="opacity-60 cursor-not-allowed"
                   />
                 </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Phone</Label>
                   <Input
-                    value={profile.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    value={profile.phone_number || ''}
+                    onChange={(e) => handleInputChange('phone_number', e.target.value)}
                   />
                 </div>
                 <div className="sm:col-span-2">
                   <Label className="text-sm font-medium mb-2 block">Location</Label>
                   <Input
-                    value={profile.location}
+                    value={profile.location || ''}
                     onChange={(e) => handleInputChange('location', e.target.value)}
                   />
                 </div>
@@ -131,7 +176,7 @@ export default function ProfilePage() {
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Headline</Label>
                   <Input
-                    value={profile.headline}
+                    value={profile.headline || ''}
                     onChange={(e) => handleInputChange('headline', e.target.value)}
                     placeholder="e.g., Senior Software Engineer"
                   />
@@ -139,7 +184,7 @@ export default function ProfilePage() {
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Bio</Label>
                   <textarea
-                    value={profile.bio}
+                    value={profile.bio || ''}
                     onChange={(e) => handleInputChange('bio', e.target.value)}
                     className="w-full h-24 p-4 rounded-lg resize-none border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     placeholder="Tell us about yourself"
@@ -165,7 +210,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {profile.skills.map((skill, index) => (
+                  {(profile.skills || []).map((skill, index) => (
                     <div
                       key={index}
                       className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary border border-border"
