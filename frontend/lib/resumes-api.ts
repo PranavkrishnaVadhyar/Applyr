@@ -1,5 +1,14 @@
 import { apiClient } from './api-client'
 
+export const MAX_RESUME_BYTES = 10 * 1024 * 1024
+
+export function validateResumeFile(file: Pick<File, 'name' | 'size'>): string | null {
+  if (!/\.(pdf|doc|docx)$/i.test(file.name)) return 'Only PDF, DOC, DOCX files are supported.'
+  if (file.size === 0) return 'Resume file is empty.'
+  if (file.size > MAX_RESUME_BYTES) return 'Resume must be 10 MB or smaller.'
+  return null
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface ExperienceItem {
@@ -57,6 +66,8 @@ export interface Resume {
   resume_content: ResumeContent[]
 }
 
+export type ResumeContentUpdate = Partial<Omit<ResumeContent, 'id' | 'resume_id'>>
+
 // ── API class ──────────────────────────────────────────────────────────────
 
 class ResumesApi {
@@ -71,31 +82,21 @@ class ResumesApi {
   }
 
   /** Update the content of a resume */
-  async updateResume(resumeId: string, content: Partial<ResumeContent>): Promise<{ message: string; data: ResumeContent }> {
+  async updateResume(resumeId: string, content: ResumeContentUpdate): Promise<{ message: string; data: ResumeContent }> {
     return apiClient.put<{ message: string; data: ResumeContent }>(`/api/resumes/${resumeId}`, content)
   }
 
   /** Upload a new resume file */
   async uploadResume(file: File): Promise<{ message: string; data: { resume: Resume; content: ResumeContent } }> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
+    const error = validateResumeFile(file)
+    if (error) throw new Error(error)
     const formData = new FormData()
     formData.append('file', file)
+    return apiClient.request('/api/resumes/', { method: 'POST', body: formData })
+  }
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/resumes/`,
-      {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      }
-    )
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}))
-      throw { message: err.detail || `HTTP ${response.status}`, status: response.status }
-    }
-
-    return response.json()
+  async getDownloadUrl(resumeId: string): Promise<{ url: string; expires_in: number }> {
+    return apiClient.get(`/api/resumes/${resumeId}/download`)
   }
 
   /** Delete a resume */

@@ -3,14 +3,15 @@ from uuid import UUID
 from datetime import datetime
 from collections import defaultdict
 
-from db.database import supabase
+from db.database import get_supabase
+from supabase import Client
 from core.security import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/me")
-async def get_user_analytics(current_user: UUID = Depends(get_current_user)):
+def get_user_analytics(current_user: UUID = Depends(get_current_user), supabase: Client = Depends(get_supabase)):
     user_id = current_user
 
     # Fetch all applications for user

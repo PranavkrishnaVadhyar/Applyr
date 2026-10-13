@@ -17,14 +17,12 @@ class ApplicationExtract(BaseModel):
     )
 
 class ExtensionExtractionRequest(BaseModel):
-    user_id: UUID
-    text: str
+    text: str = Field(min_length=1, max_length=30000)
 
 
 
 
 class ApplicationCreate(BaseModel):
-    user_id: UUID
     resume_id: Optional[UUID] = None
     job_role: str
     job_description: str

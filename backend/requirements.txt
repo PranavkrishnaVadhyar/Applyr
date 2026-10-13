@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic[email]
+python-multipart
+python-dotenv
+supabase>=2.30.0,<3
+httpx>=0.28,<1
+langchain-core>=1.2.21,<2
+langchain
+langchain-groq>=1.1.2,<2
+llama-cloud>=2.4.1,<3

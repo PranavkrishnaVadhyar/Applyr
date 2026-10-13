@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { DashboardLayout } from '@/components/layouts/dashboard-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import {
-  resumesApi, Resume, ResumeContent,
+  resumesApi, Resume, ResumeContent, ResumeContentUpdate, validateResumeFile,
   ExperienceItem, EducationItem, ProjectItem, CertificationItem
 } from '@/lib/resumes-api'
 
@@ -72,7 +72,7 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
     projects: [], certifications: [], achievements: [], languages: []
   }
 
-  const [form, setForm] = useState<Partial<ResumeContent>>({
+  const [form, setForm] = useState<ResumeContentUpdate>({
     summary: content.summary ?? '',
     skills: content.skills ?? [],
     experience: content.experience ?? [],
@@ -85,17 +85,17 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
-  const set = (key: keyof ResumeContent, val: unknown) => setForm(f => ({ ...f, [key]: val }))
+  const set = (key: keyof ResumeContentUpdate, val: unknown) => setForm(f => ({ ...f, [key]: val }))
 
   const save = async () => {
     setSaving(true)
     try {
-      await resumesApi.updateResume(resume.id, form)
+      const result = await resumesApi.updateResume(resume.id, form)
       setToast({ type: 'success', msg: 'Resume updated successfully!' })
       setTimeout(() => setToast(null), 3000)
-      onSaved({ ...resume, resume_content: [{ ...content, ...form } as ResumeContent] })
-    } catch {
-      setToast({ type: 'error', msg: 'Failed to save. Please try again.' })
+      onSaved({ ...resume, resume_content: [result.data] })
+    } catch (error) {
+      setToast({ type: 'error', msg: error instanceof Error ? error.message : 'Failed to save. Please try again.' })
       setTimeout(() => setToast(null), 3000)
     } finally {
       setSaving(false)
@@ -325,13 +325,19 @@ export default function ResumesPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [listError, setListError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const uploadInFlight = useRef(false)
+  const deleteInFlight = useRef(false)
 
   const fetchResumes = useCallback(async () => {
+    setIsLoading(true)
+    setListError(null)
     try {
       const data = await resumesApi.getUserResumes()
       setResumes(data)
-    } catch {
-      console.error('Failed to load resumes')
+    } catch (error) {
+      setListError(error instanceof Error ? error.message : 'Could not load resumes. Please retry.')
     } finally {
       setIsLoading(false)
     }
@@ -340,19 +346,21 @@ export default function ResumesPage() {
   useEffect(() => { if (user) fetchResumes() }, [user, fetchResumes])
 
   const handleFile = async (file: File) => {
-    const allowed = ['pdf', 'doc', 'docx']
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-    if (!allowed.includes(ext)) { setUploadError('Only PDF, DOC, DOCX files are supported.'); return }
-    if (file.size > 5 * 1024 * 1024) { setUploadError('File must be under 5 MB.'); return }
+    if (uploadInFlight.current) return
+    const validationError = validateResumeFile(file)
+    if (validationError) { setUploadError(validationError); return }
 
+    uploadInFlight.current = true
     setUploading(true)
     setUploadError(null)
     try {
-      await resumesApi.uploadResume(file)
+      const result = await resumesApi.uploadResume(file)
+      setResumes(current => [result.data.resume, ...current.filter(item => item.id !== result.data.resume.id)])
       await fetchResumes()
-    } catch (err: any) {
-      setUploadError(err?.message ?? 'Upload failed.')
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
+      uploadInFlight.current = false
       setUploading(false)
     }
   }
@@ -365,13 +373,32 @@ export default function ResumesPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (deleteInFlight.current) return
+    deleteInFlight.current = true
+    setActionError(null)
     setDeleteId(id)
     try {
       await resumesApi.deleteResume(id)
       setResumes(r => r.filter(x => x.id !== id))
       if (selected?.id === id) setSelected(null)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not delete the resume. Please retry.')
     } finally {
+      deleteInFlight.current = false
       setDeleteId(null)
+    }
+  }
+
+  const handleDownload = async (id: string) => {
+    setActionError(null)
+    try {
+      const { url } = await resumesApi.getDownloadUrl(id)
+      const link = document.createElement('a')
+      link.href = url
+      link.rel = 'noopener noreferrer'
+      link.click()
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not download the resume. Please retry.')
     }
   }
 
@@ -393,11 +420,13 @@ export default function ResumesPage() {
           onDragOver={e => { e.preventDefault(); setDragActive(true) }}
           onDragLeave={e => { e.preventDefault(); setDragActive(false) }}
           onDrop={handleDrop}
-          onClick={() => document.getElementById('resume-file-input')?.click()}
+          onClick={() => { if (!uploading) document.getElementById('resume-file-input')?.click() }}
+          aria-busy={uploading}
         >
           <input
             id="resume-file-input"
             type="file"
+            disabled={uploading}
             accept=".pdf,.doc,.docx"
             className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }}
@@ -408,7 +437,7 @@ export default function ResumesPage() {
             </div>
             <div>
               <p className="font-semibold text-foreground">{uploading ? 'Uploading & extracting…' : 'Drag & drop your resume here'}</p>
-              <p className="text-sm text-muted-foreground mt-1">{uploading ? 'This may take a few seconds' : 'or click to browse — PDF, DOC, DOCX · Max 5 MB'}</p>
+              <p className="text-sm text-muted-foreground mt-1">{uploading ? 'Extraction can take a few minutes. Please keep this page open.' : 'or click to browse — PDF, DOC, DOCX · Max 10 MB'}</p>
             </div>
           </div>
         </Card>
@@ -420,10 +449,11 @@ export default function ResumesPage() {
         )}
 
         {/* List */}
+        {actionError && <div role="alert" className="text-sm text-destructive">{actionError}</div>}
         <div className="space-y-3">
           <h2 className="font-display text-lg font-semibold text-foreground">
             Your Resumes
-            {!isLoading && <span className="ml-2 text-sm font-normal text-muted-foreground">({resumes.length})</span>}
+            {!isLoading && !listError && <span className="ml-2 text-sm font-normal text-muted-foreground">({resumes.length})</span>}
           </h2>
 
           {isLoading ? (
@@ -432,6 +462,11 @@ export default function ResumesPage() {
                 <div key={i} className="h-20 bg-secondary/40 rounded-xl animate-pulse" />
               ))}
             </div>
+          ) : listError ? (
+            <Card className="p-6 space-y-3" role="alert">
+              <p className="text-destructive">{listError}</p>
+              <Button variant="outline" onClick={fetchResumes}>Retry loading resumes</Button>
+            </Card>
           ) : resumes.length === 0 ? (
             <Card className="bg-card border border-border rounded-xl p-12 text-center">
               <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
@@ -461,6 +496,8 @@ export default function ResumesPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={e => { e.stopPropagation(); void handleDownload(resume.id) }}
+                    className="text-xs text-primary px-2 py-1.5">Download</button>
                   <button
                     onClick={e => { e.stopPropagation(); setSelected(resume) }}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
@@ -469,7 +506,7 @@ export default function ResumesPage() {
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); handleDelete(resume.id) }}
-                    disabled={deleteId === resume.id}
+                    disabled={deleteId !== null}
                     className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                     title="Delete resume"
                   >
@@ -485,6 +522,7 @@ export default function ResumesPage() {
       {/* Side-panel editor */}
       {selected && (
         <ResumeEditor
+          key={selected.id}
           resume={selected}
           onClose={() => setSelected(null)}
           onSaved={updated => {

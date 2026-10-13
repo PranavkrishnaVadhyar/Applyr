@@ -1,12 +1,14 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
-import { apiClient } from './api-client'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
+import { apiClient, ApiError, clearSession, saveSession, SessionTokens } from './api-client'
 
 export interface User {
   id: string
   email: string
   name: string
+  first_name?: string | null
+  last_name?: string | null
   subscription_tier?: string
 }
 
@@ -16,126 +18,83 @@ export interface AuthContextType {
   error: string | null
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, name: string) => Promise<void>
+  register: (email: string, password: string, name: string) => Promise<boolean>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const userRequest = useRef(0)
 
-  // Initialize user from token on mount
-  useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const token = localStorage.getItem('authToken')
-        if (token) {
-          await refreshUserData()
-        }
-      } catch (err) {
-        localStorage.removeItem('authToken')
-        localStorage.removeItem('refreshToken')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    initializeAuth()
+  const refreshUser = useCallback(async () => {
+    const request = ++userRequest.current
+    const response = await apiClient.get<User>('/api/auth/me')
+    if (!localStorage.getItem('authToken') || request !== userRequest.current) return
+    setUser({ ...response, name: [response.first_name, response.last_name].filter(Boolean).join(' ') })
+    setError(null)
   }, [])
 
-  const refreshUserData = async () => {
-    try {
-      const response = await apiClient.get<User>('/api/auth/me')
-      // Note: Backend might return "first_name" and "last_name", adjust if user type fails validation later
-      setUser(response as unknown as User)
-      setError(null)
-    } catch (err) {
-      throw err
+  useEffect(() => {
+    const initialize = async () => {
+      setLoading(true)
+      try {
+        if (localStorage.getItem('authToken') || localStorage.getItem('refreshToken')) await refreshUser()
+        else setUser(null)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) clearSession()
+        else setError(err instanceof Error ? err.message : 'Unable to load your account')
+      } finally { setLoading(false) }
     }
-  }
+    const signedOut = () => { ++userRequest.current; setUser(null); setError(null) }
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === 'authToken' || event.key === null) void initialize()
+    }
+    window.addEventListener('auth:logout', signedOut)
+    window.addEventListener('storage', storageChanged)
+    void initialize()
+    return () => {
+      window.removeEventListener('auth:logout', signedOut)
+      window.removeEventListener('storage', storageChanged)
+    }
+  }, [refreshUser])
 
   const login = async (email: string, password: string) => {
     setError(null)
-    try {
-      const response = await apiClient.post<{ access_token: string; refresh_token: string; user_id: string; user: User }>('/api/auth/signin', {
-        email,
-        password,
-      })
-
-      localStorage.setItem('authToken', response.access_token)
-      if (response.refresh_token) {
-        localStorage.setItem('refreshToken', response.refresh_token)
-      }
-      
-      // Update global user state (assuming signin backend response structure /me is fetched separately)
-      await refreshUserData()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed'
-      setError(message)
-      throw err
-    }
+    const session = await apiClient.post<SessionTokens>('/api/auth/signin', { email, password })
+    saveSession(session)
+    await refreshUser()
   }
 
   const register = async (email: string, password: string, name: string) => {
     setError(null)
-    try {
-      const nameParts = name.trim().split(' ')
-      const firstName = nameParts[0] || ''
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ' ' // minimal placeholder if no last name
-
-      const response = await apiClient.post<{ message: string; user_id: string }>('/api/auth/signup', {
-        email: email,
-        password: password,
-        first_name: firstName,
-        last_name: lastName,
-        role: "user"
-      })
-
-      // Backend signup does not directly return the session token right now.
-      // Automatically log the user in to get the token.
-      await login(email, password)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Registration failed'
-      setError(message)
-      throw err
-    }
+    const [first_name, ...rest] = name.trim().split(/\s+/)
+    const result = await apiClient.post<SessionTokens & { requires_email_confirmation: boolean }>('/api/auth/signup', {
+      email, password, first_name, last_name: rest.join(' '),
+    })
+    if (result.requires_email_confirmation) return false
+    saveSession(result)
+    await refreshUser()
+    return true
   }
 
   const logout = async () => {
-    try {
-      await apiClient.post('/api/auth/logout', {})
-    } catch (err) {
-      console.error('Logout error:', err instanceof Error ? err.message : err)
-    } finally {
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('refreshToken')
-      setUser(null)
-      setError(null)
-    }
+    try { await apiClient.post('/api/auth/logout', {}) }
+    catch { console.error('Remote sign-out failed; the local session was cleared.') }
+    finally { clearSession() }
   }
 
-  const value: AuthContextType = {
-    user,
-    loading,
-    error,
-    isAuthenticated: !!user,
-    login,
-    register,
-    logout,
-    refreshUser: refreshUserData,
-  }
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, loading, error, isAuthenticated: !!user, login, register, logout, refreshUser }}>
+    {children}
+  </AuthContext.Provider>
 }
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider')
   return context
 }

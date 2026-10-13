@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 import uvicorn
 from routes import applications, auth, analytics, users, resumes
 
@@ -15,8 +16,8 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ⚠️ Restrict in production
-    allow_credentials=True,
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if origin.strip()],  # ⚠️ Restrict in production
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -42,7 +43,7 @@ async def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app.main:app",
+        "main:app",
         host="0.0.0.0",
         port=8000,
         reload=True

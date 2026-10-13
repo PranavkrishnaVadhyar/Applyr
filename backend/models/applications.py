@@ -1,15 +1,7 @@
 import uuid
-from sqlalchemy import (
-    Column,
-    Text,
-    String,
-    Date,
-    DateTime,
-    ForeignKey,
-    JSON,
-    func,
-    CheckConstraint
-)
+# pyrefly: ignore [missing-import]
+from sqlalchemy import (Column, Text, String, Date, DateTime, ForeignKey, JSON, func, CheckConstraint)
+# pyrefly: ignore [missing-import]
 from sqlalchemy.dialects.postgresql import UUID
 from db.database import Base
 

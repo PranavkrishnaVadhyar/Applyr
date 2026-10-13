@@ -1,279 +1,134 @@
-from fastapi import (
-    APIRouter,
-    UploadFile,
-    File,
-    HTTPException,
-    Depends
-)
-
-from uuid import UUID
-from tempfile import NamedTemporaryFile
-import shutil
+import logging
 import os
+from tempfile import NamedTemporaryFile
+from uuid import UUID
 
-from db.database import supabase
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Response
+from supabase import Client
+
 from core.security import get_current_user
-
 from core.resume_mgmt import (
-    process_resume_upload
+    MAX_RESUME_BYTES, SUPABASE_BUCKET, ResumeProcessingError,
+    normalize_content, normalize_resume, process_resume_upload, storage_path_for_resume, remove_storage_file,
 )
+from db.database import get_supabase
+from schemas.resumes import ResumeContentUpdate, ResumeResponse, ResumeUploadResponse, ResumeUpdateResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
-# =========================================================
-# CREATE / UPLOAD RESUME
-# =========================================================
-@router.post("/")
-async def upload_resume(
-    file: UploadFile = File(...),
-    current_user: UUID = Depends(get_current_user)
-):
+def owned_resume(supabase: Client, resume_id: UUID, user_id: UUID):
+    result = (supabase.table("resumes").select("*, resume_content(*)")
+              .eq("id", str(resume_id)).eq("user_id", str(user_id)).limit(1).execute())
+    if not result.data:
+        raise HTTPException(404, "Resume not found")
+    return result.data[0]
 
-    allowed_extensions = [
-        "pdf",
-        "doc",
-        "docx"
-    ]
 
-    file_extension = file.filename.split(".")[-1].lower()
-
-    if file_extension not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file type"
-        )
-
-    temp_file_path = None
-
+@router.post("/", response_model=ResumeUploadResponse)
+def upload_resume(file: UploadFile = File(...),
+                  current_user: UUID = Depends(get_current_user),
+                  supabase: Client = Depends(get_supabase)):
+    filename = (file.filename or "").replace("\\", "/").split("/")[-1]
+    extension = filename.rsplit(".", 1)[-1].lower()
+    if "." not in filename or extension not in ("pdf", "doc", "docx"):
+        raise HTTPException(400, "Only PDF, DOC and DOCX files are supported")
+    temp_path = None
     try:
-
-        # =====================================
-        # SAVE TEMP FILE
-        # =====================================
-        with NamedTemporaryFile(
-            delete=False,
-            suffix=f".{file_extension}"
-        ) as temp_file:
-
-            shutil.copyfileobj(
-                file.file,
-                temp_file
-            )
-
-            temp_file_path = temp_file.name
-
-        # =====================================
-        # PROCESS COMPLETE PIPELINE
-        # =====================================
-        result = process_resume_upload(
-            supabase=supabase,
-            file_path=temp_file_path,
-            user_id=str(current_user)
-        )
-
-        return {
-            "message": "Resume uploaded successfully",
-            "data": result
-        }
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-
+        with NamedTemporaryFile(delete=False, suffix=f".{extension}") as temp:
+            temp_path = temp.name
+            size = 0
+            while chunk := file.file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_RESUME_BYTES:
+                    raise HTTPException(413, "Resume must be 10 MB or smaller")
+                temp.write(chunk)
+            if not size:
+                raise HTTPException(400, "Resume file is empty")
+        result = process_resume_upload(supabase, temp_path, str(current_user), filename)
+        return {"message": "Resume uploaded successfully", "data": result}
+    except HTTPException:
+        raise
+    except ResumeProcessingError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except Exception as exc:
+        logger.error("Resume upload failed (%s)", type(exc).__name__)
+        raise HTTPException(502, "Resume processing failed. Please try again.")
     finally:
-
-        # Cleanup temp file
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
-# =========================================================
-# GET ALL USER RESUMES
-# =========================================================
-@router.get("/")
-async def get_user_resumes(
-    current_user: UUID = Depends(get_current_user)
-):
-
-    response = (
-        supabase
-        .table("resumes")
-        .select("""
-            *,
-            resume_content(*)
-        """)
-        .eq("user_id", str(current_user))
-        .eq("active", True)
-        .order("created_at", desc=True)
-        .execute()
-    )
-
-    return response.data
+@router.get("/", response_model=list[ResumeResponse])
+def get_user_resumes(current_user: UUID = Depends(get_current_user),
+                     supabase: Client = Depends(get_supabase)):
+    result = (supabase.table("resumes").select("*, resume_content(*)")
+              .eq("user_id", str(current_user)).eq("active", True)
+              .order("created_at", desc=True).execute())
+    return [normalize_resume(row) for row in (result.data or [])]
 
 
-# =========================================================
-# GET SINGLE RESUME
-# =========================================================
-@router.get("/{resume_id}")
-async def get_resume(
-    resume_id: UUID,
-    current_user: UUID = Depends(get_current_user)
-):
-
-    response = (
-        supabase
-        .table("resumes")
-        .select("""
-            *,
-            resume_content(*)
-        """)
-        .eq("id", str(resume_id))
-        .eq("user_id", str(current_user))
-        .single()
-        .execute()
-    )
-
-    if not response.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Resume not found"
-        )
-
-    return response.data
+@router.get("/{resume_id}", response_model=ResumeResponse)
+def get_resume(resume_id: UUID, current_user: UUID = Depends(get_current_user),
+               supabase: Client = Depends(get_supabase)):
+    return normalize_resume(owned_resume(supabase, resume_id, current_user))
 
 
-# =========================================================
-# UPDATE RESUME CONTENT
-# =========================================================
-@router.put("/{resume_id}")
-async def update_resume(
-    resume_id: UUID,
-    payload: dict,
-    current_user: UUID = Depends(get_current_user)
-):
-
-    # =====================================
-    # VERIFY OWNERSHIP
-    # =====================================
-    resume_response = (
-        supabase
-        .table("resumes")
-        .select("id")
-        .eq("id", str(resume_id))
-        .eq("user_id", str(current_user))
-        .single()
-        .execute()
-    )
-
-    if not resume_response.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Resume not found"
-        )
-
-    # =====================================
-    # UPDATE CONTENT
-    # =====================================
-    response = (
-        supabase
-        .table("resume_content")
-        .update(payload)
-        .eq("resume_id", str(resume_id))
-        .execute()
-    )
-
-    if not response.data:
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to update resume"
-        )
-
-    return {
-        "message": "Resume updated successfully",
-        "data": response.data[0]
-    }
-
-
-# =========================================================
-# DELETE RESUME
-# =========================================================
-@router.delete("/{resume_id}")
-async def delete_resume(
-    resume_id: UUID,
-    current_user: UUID = Depends(get_current_user)
-):
-
-    # =====================================
-    # FETCH RESUME
-    # =====================================
-    response = (
-        supabase
-        .table("resumes")
-        .select("*")
-        .eq("id", str(resume_id))
-        .eq("user_id", str(current_user))
-        .single()
-        .execute()
-    )
-
-    if not response.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Resume not found"
-        )
-
-    resume = response.data
-
-    # =====================================
-    # DELETE FILE FROM STORAGE
-    # =====================================
+@router.get("/{resume_id}/download")
+def download_resume(resume_id: UUID, response: Response, current_user: UUID = Depends(get_current_user),
+                    supabase: Client = Depends(get_supabase)):
+    resume = owned_resume(supabase, resume_id, current_user)
     try:
-
-        file_url = resume.get("file_url")
-
-        if file_url:
-
-            # Extract path from URL
-            # Example:
-            # resumes/userid/file.pdf
-
-            split_text = "/storage/v1/object/public/resumes/"
-
-            if split_text in file_url:
-
-                storage_path = file_url.split(
-                    split_text
-                )[1]
-
-                supabase.storage.from_("resumes").remove(
-                    [storage_path]
-                )
-
+        path = storage_path_for_resume(resume, str(current_user))
+        if not path:
+            raise HTTPException(404, "Original resume file is unavailable")
+        result = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
+            path, 60, {"download": resume["filename"]})
+        if not result.get("signedURL"):
+            raise RuntimeError("Missing signed URL")
+        response.headers["Cache-Control"] = "no-store"
+        return {"url": result["signedURL"], "expires_in": 60}
+    except HTTPException:
+        raise
     except Exception:
-        pass
+        raise HTTPException(502, "Could not open the resume file. Please try again.")
 
-    # =====================================
-    # DELETE DB RECORD
-    # CASCADE deletes resume_content
-    # =====================================
-    delete_response = (
-        supabase
-        .table("resumes")
-        .delete()
-        .eq("id", str(resume_id))
-        .execute()
-    )
 
-    if not delete_response.data:
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to delete resume"
-        )
+@router.put("/{resume_id}", response_model=ResumeUpdateResponse)
+def update_resume(resume_id: UUID, payload: ResumeContentUpdate,
+                  current_user: UUID = Depends(get_current_user),
+                  supabase: Client = Depends(get_supabase)):
+    owned_resume(supabase, resume_id, current_user)
+    data = payload.model_dump(exclude_unset=True, mode="json")
+    if not data:
+        raise HTTPException(400, "No resume changes provided")
+    result = supabase.table("resume_content").update(data).eq("resume_id", str(resume_id)).execute()
+    if not result.data:
+        raise HTTPException(404, "Resume content not found. Upload the resume again.")
+    return {"message": "Resume updated successfully", "data": normalize_content(result.data[0])}
 
-    return {
-        "message": "Resume deleted successfully"
-    }
+
+@router.delete("/{resume_id}")
+def delete_resume(resume_id: UUID, current_user: UUID = Depends(get_current_user),
+                  supabase: Client = Depends(get_supabase)):
+    resume = owned_resume(supabase, resume_id, current_user)
+    linked = (supabase.table("applications").select("id").eq("resume_id", str(resume_id))
+              .eq("user_id", str(current_user)).limit(1).execute())
+    if linked.data:
+        raise HTTPException(409, "This resume is linked to an application. Unlink it before deleting.")
+    try:
+        path = storage_path_for_resume(resume, str(current_user))
+        if path:
+            remove_storage_file(supabase.storage.from_(SUPABASE_BUCKET), path)
+    except Exception:
+        # Preserve the record so storage deletion can be retried.
+        raise HTTPException(502, "Could not delete the resume file. Your record was kept; please retry.")
+    try:
+        result = (supabase.table("resumes").delete().eq("id", str(resume_id))
+                  .eq("user_id", str(current_user)).execute())
+        if not result.data:
+            raise RuntimeError("Resume deletion was not confirmed")
+    except Exception:
+        raise HTTPException(502, "The file was removed, but the resume record could not be deleted. Please retry.")
+    return {"message": "Resume deleted successfully"}

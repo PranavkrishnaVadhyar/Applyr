@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const { register: registerUser } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState(false)
 
   const {
     register,
@@ -31,8 +32,9 @@ export default function RegisterPage() {
     setIsLoading(true)
     setError(null)
     try {
-      await registerUser(data.email, data.password, data.name)
-      router.push('/dashboard')
+      const signedIn = await registerUser(data.email, data.password, data.name)
+      if (signedIn) router.push('/dashboard')
+      else setConfirmation(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
     } finally {
@@ -42,6 +44,11 @@ export default function RegisterPage() {
 
   return (
     <AuthLayout>
+      {confirmation ? <div className="space-y-4" role="status">
+        <h2 className="text-xl font-bold">Check your email</h2>
+        <p>Confirm your account using the email link, then sign in.</p>
+        <Link href="/auth/login" className="text-primary underline">Go to sign in</Link>
+      </div> :
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <h2 className="text-xl font-bold text-foreground mb-6">Create Your Account</h2>
 
@@ -144,7 +151,7 @@ export default function RegisterPage() {
             Sign In
           </Link>
         </div>
-      </form>
+      </form>}
     </AuthLayout>
   )
 }

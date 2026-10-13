@@ -16,8 +16,17 @@
     <span class="header-badge">Extractor</span>
   </div>
 
+  <form id="loginForm" class="hidden">
+    <p>Sign in with your Applyr account.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button id="loginBtn" class="btn-primary" type="submit">Sign in</button>
+  </form>
+  <button id="logoutBtn" class="btn-primary hidden">Sign out</button>
   <!-- Main action -->
-  <button id="extractBtn" class="btn-primary">
+  <button id="extractBtn" class="btn-primary hidden">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
     </svg>

@@ -219,3 +219,5 @@ body {
   color: #1AFF5C;
   border: 1px solid rgba(26, 255, 92, 0.2);
 }
+#loginForm input { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 12px; padding: 9px; border-radius: 6px; border: 1px solid #666; }
+#logoutBtn { margin-bottom: 12px; }

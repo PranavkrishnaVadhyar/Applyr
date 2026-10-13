@@ -34,6 +34,8 @@ function extractJobDetails() {
     };
 }
 
+if (!globalThis.applyrExtractorInstalled) {
+globalThis.applyrExtractorInstalled = true;
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === "extractJob") {
@@ -43,3 +45,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse(jobData);
     }
 });
+}

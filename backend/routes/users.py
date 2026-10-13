@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 from uuid import UUID
 
-from db.database import supabase
+from db.database import get_supabase
+from supabase import Client
 from core.security import get_current_user
 from schemas.users import UserUpdateRequest, UserResponse
 
@@ -15,8 +16,9 @@ user_router = APIRouter()
     "/me",
     response_model=UserResponse
 )
-async def get_user_details(
-    current_user: UUID = Depends(get_current_user)
+def get_user_details(
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
     user_id = current_user
 
@@ -55,9 +57,10 @@ async def get_user_details(
 # UPDATE CURRENT USER DETAILS
 # ========================================
 @user_router.put("/me")
-async def update_user_details(
+def update_user_details(
     payload: UserUpdateRequest,
-    current_user: UUID = Depends(get_current_user)
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
     user_id = current_user
 

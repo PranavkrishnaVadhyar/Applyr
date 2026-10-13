@@ -1,29 +1,27 @@
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from db.database import supabase
 from uuid import UUID
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+from supabase import Client
+from supabase_auth.errors import AuthApiError
+from db.database import bearer, get_supabase
 
-security = HTTPBearer()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
-    """
-    Validates the bearer token against Supabase Auth.
-    Returns the user's UUID if valid.
-    """
-    token = credentials.credentials
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    supabase: Client = Depends(get_supabase),
+) -> UUID:
+    unauthorized = HTTPException(
+        status_code=401, detail="Invalid or expired authentication token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None:
+        raise unauthorized
     try:
-        response = supabase.auth.get_user(token)
-        if not response or not response.user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        # Parse and return UUID to match the application route typing
-        return UUID(response.user.id)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Could not validate credentials: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        response = supabase.auth.get_user(credentials.credentials)
+    except AuthApiError as exc:
+        if exc.status >= 500:
+            raise HTTPException(503, "Authentication service unavailable") from exc
+        raise unauthorized from exc
+    if not response or not response.user:
+        raise unauthorized
+    return UUID(response.user.id)

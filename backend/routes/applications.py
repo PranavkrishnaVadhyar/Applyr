@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends
 from uuid import UUID, uuid4
 from typing import List
-import uuid
-from db.database import supabase
+from starlette.concurrency import run_in_threadpool
+from db.database import get_supabase
+from supabase import Client
 from schemas.applications import (
     ApplicationCreate,
     ApplicationUpdate,
@@ -15,24 +16,26 @@ from core.security import get_current_user
 router = APIRouter()
 
 
-def serialize_uuid(data: dict):
-    for key, value in data.items():
-        if isinstance(value, uuid.UUID):
-            data[key] = str(value)
-    return data
+def verify_resume_owner(supabase: Client, resume_id: UUID | None, user_id: UUID):
+    if resume_id is None:
+        return
+    result = (supabase.table("resumes").select("id")
+              .eq("id", str(resume_id)).eq("user_id", str(user_id)).limit(1).execute())
+    if not result.data:
+        raise HTTPException(404, "Resume not found")
 
 
 @router.post("/", response_model=ApplicationResponse)
-async def create_application(
+def create_application(
     payload: ApplicationCreate,
-    current_user: UUID = Depends(get_current_user)
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
 
     data = payload.model_dump(mode="json")
     data["id"] = str(uuid4())
-    # Ensure the user_id in the payload matches the current_user if necessary,
-    # or override depending on your requirements.
     data["user_id"] = str(current_user)
+    verify_resume_owner(supabase, payload.resume_id, current_user)
 
     response = supabase.table("applications").insert(data).execute()
 
@@ -43,24 +46,30 @@ async def create_application(
 
 
 @router.post("/extract", response_model=ApplicationResponse)
-async def extract_and_create_application(payload: ExtensionExtractionRequest):
+async def extract_and_create_application(
+    payload: ExtensionExtractionRequest,
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
+):
     try:
         extracted_data = await extract_application_fields(payload.text)
         
-        application = await core_create_application(
-            user_id=payload.user_id,
+        application = await run_in_threadpool(core_create_application,
+            user_id=current_user,
+            supabase=supabase,
             extracted=extracted_data
         )
         return application
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Job extraction failed. Please try again.")
 
 
 # ✅ READ ALL (for a user)
 @router.get("/user/{user_id}", response_model=List[ApplicationResponse])
-async def get_user_applications(
+def get_user_applications(
     user_id: UUID,
-    current_user: UUID = Depends(get_current_user)
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
     if user_id != current_user:
         raise HTTPException(status_code=403, detail="Not authorized to access these applications")
@@ -79,9 +88,10 @@ async def get_user_applications(
 
 # ✅ READ ONE
 @router.get("/{application_id}", response_model=ApplicationResponse)
-async def get_application(
+def get_application(
     application_id: UUID,
-    current_user: UUID = Depends(get_current_user)
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
     response = (
         supabase
@@ -101,12 +111,14 @@ async def get_application(
 
 # ✅ UPDATE
 @router.put("/{application_id}", response_model=ApplicationResponse)
-async def update_application(
+def update_application(
     application_id: UUID,
     payload: ApplicationUpdate,
-    current_user: UUID = Depends(get_current_user)
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
-    update_data = payload.model_dump(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True, mode="json")
+    verify_resume_owner(supabase, payload.resume_id, current_user)
 
     response = (
         supabase
@@ -125,9 +137,10 @@ async def update_application(
 
 # ✅ DELETE
 @router.delete("/{application_id}")
-async def delete_application(
+def delete_application(
     application_id: UUID,
-    current_user: UUID = Depends(get_current_user)
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
 ):
     response = (
         supabase

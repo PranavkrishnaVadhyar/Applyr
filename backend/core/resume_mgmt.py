@@ -16,8 +16,7 @@ load_dotenv()
 
 LLAMA_CLOUD_API_KEY = os.getenv("LLAMA_CLOUD_API_KEY")
 
-if not LLAMA_CLOUD_API_KEY:
-    raise ValueError("LLAMA_CLOUD_API_KEY missing")
+
 
 DEFAULT_EXPERIENCE_ITEM = { "company": None, "role": None, "duration": None, "description": None, "technologies": [] } 
 DEFAULT_EDUCATION_ITEM = { "institution": None, "degree": None, "field": None, "year": None, "grade": None } 
@@ -228,394 +227,175 @@ class ResumeExtractSchema(BaseModel):
         description="Languages known"
     )
 
-# ==========================================
-# LLAMA CLOUD CLIENT
-# ==========================================
-client = LlamaCloud(
-    api_key=LLAMA_CLOUD_API_KEY
-)
+
+# Resume content is normalized before storage and at the API boundary.
+CONTENT_LISTS = ("skills", "experience", "education", "projects", "certifications",
+                 "achievements", "languages")
+SUPABASE_BUCKET = "resumes"
+MAX_RESUME_BYTES = 10 * 1024 * 1024
 
 
-# ==========================================
-# HELPER FUNCTION
-# ENSURE JSONB STRUCTURE CONSISTENCY
-# ==========================================
+class ResumeProcessingError(RuntimeError):
+    pass
+
+
 def ensure_json_structure(data: dict) -> dict:
-
-    # EXPERIENCE
-    if not data.get("experience"):
-        data["experience"] = [DEFAULT_EXPERIENCE_ITEM.copy()]
-    else:
-        normalized = []
-
-        for item in data["experience"]:
-            normalized.append({
-                "company": item.get("company"),
-                "role": item.get("role"),
-                "duration": item.get("duration"),
-                "description": item.get("description"),
-                "technologies": item.get("technologies", [])
-            })
-
-        data["experience"] = normalized
-
-    # EDUCATION
-    if not data.get("education"):
-        data["education"] = [DEFAULT_EDUCATION_ITEM.copy()]
-    else:
-        normalized = []
-
-        for item in data["education"]:
-            normalized.append({
-                "institution": item.get("institution"),
-                "degree": item.get("degree"),
-                "field": item.get("field"),
-                "year": item.get("year"),
-                "grade": item.get("grade")
-            })
-
-        data["education"] = normalized
-
-    # PROJECTS
-    if not data.get("projects"):
-        data["projects"] = [DEFAULT_PROJECT_ITEM.copy()]
-    else:
-        normalized = []
-
-        for item in data["projects"]:
-            normalized.append({
-                "title": item.get("title"),
-                "description": item.get("description"),
-                "technologies": item.get("technologies", []),
-                "github": item.get("github"),
-                "live_link": item.get("live_link")
-            })
-
-        data["projects"] = normalized
-
-    # CERTIFICATIONS
-    if not data.get("certifications"):
-        data["certifications"] = [DEFAULT_CERTIFICATION_ITEM.copy()]
-    else:
-        normalized = []
-
-        for item in data["certifications"]:
-            normalized.append({
-                "name": item.get("name"),
-                "issuer": item.get("issuer"),
-                "year": item.get("year")
-            })
-
-        data["certifications"] = normalized
-
-    return data
+    data = dict(data)
+    for key in CONTENT_LISTS:
+        data[key] = data.get(key) or []
+    for key in ("experience", "projects"):
+        data[key] = [{**item, "technologies": item.get("technologies") or []}
+                     for item in data[key]]
+    return ResumeExtractSchema.model_validate(data).model_dump(mode="json")
 
 
-# ==========================================
-# RESUME EXTRACTION FUNCTION
-# ==========================================
+def normalize_content(data: dict) -> dict:
+    normalized = ensure_json_structure(data)
+    return {**data, **{key: normalized[key] for key in ("summary", *CONTENT_LISTS)}}
+
+
+def normalize_resume(data: dict) -> dict:
+    content = data.get("resume_content")
+    if isinstance(content, dict):
+        content = [content]
+    return {**data, "file_url": None,
+            "resume_content": [normalize_content(item) for item in (content or [])]}
+
+
 def extract_resume_details(file_path: str) -> dict:
+    from pathlib import Path
+    import logging
 
+    client = LlamaCloud(api_key=os.environ["LLAMA_CLOUD_API_KEY"], timeout=30, max_retries=0)
+    file_obj = job = None
     try:
-
-        # ==================================
-        # UPLOAD FILE
-        # ==================================
-        file_obj = client.files.create(
-            file=file_path,
-            purpose="extract"
-        )
-
-        # ==================================
-        # CREATE EXTRACTION JOB
-        # ==================================
+        file_obj = client.files.create(file=Path(file_path), purpose="extract")
         job = client.extract.create(
             file_input=file_obj.id,
-            configuration={
-                "data_schema": ResumeExtractSchema.model_json_schema(),
-                "extraction_target": "per_doc",
-                "tier": "agentic",
-            },
+            configuration={"data_schema": ResumeExtractSchema.model_json_schema(),
+                           "extraction_target": "per_doc", "tier": "agentic"},
         )
-
-        # ==================================
-        # POLL UNTIL COMPLETE
-        # ==================================
-        while job.status not in (
-            "COMPLETED",
-            "FAILED",
-            "CANCELLED"
-        ):
+        deadline = time.monotonic() + 120
+        while job.status not in ("COMPLETED", "FAILED", "CANCELLED"):
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Resume extraction timed out")
             time.sleep(2)
             job = client.extract.get(job.id)
-
-        # ==================================
-        # HANDLE FAILURE
-        # ==================================
         if job.status != "COMPLETED":
-            raise Exception(
-                f"Extraction failed with status: {job.status}"
-            )
-
-        # ==================================
-        # GET EXTRACTED DATA
-        # ==================================
-        extracted_data = job.extract_result
-
-        # ==================================
-        # ENSURE JSONB STRUCTURE
-        # ==================================
-        extracted_data = ensure_json_structure(
-            extracted_data
-        )
-
-        return extracted_data
-
-    except Exception as e:
-        raise Exception(
-            f"Resume extraction failed: {str(e)}"
-        )
+            raise ResumeProcessingError("Resume extraction failed")
+        return ensure_json_structure(job.extract_result)
+    finally:
+        failed = False
+        # These are only the provider resources created by this invocation.
+        for resource, identifier in ((client.extract, job.id if job else None),
+                                     (client.files, file_obj.id if file_obj else None)):
+            if identifier:
+                try:
+                    resource.delete(identifier)
+                except Exception:
+                    failed = True
+                    logging.getLogger(__name__).error("Resume provider cleanup failed for %s", identifier)
+        client.close()
+        if failed:
+            raise ResumeProcessingError("Resume processing could not finish cleanup. Please contact support.")
 
 
+def storage_path_for_resume(resume: dict, user_id: str) -> str | None:
+    from urllib.parse import urlparse, unquote
+
+    value = resume.get("file_url")
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme == "storage" and parsed.netloc == SUPABASE_BUCKET:
+        path = unquote(parsed.path.lstrip("/"))
+    else:
+        # Backward compatibility for rows created before private downloads.
+        expected = urlparse(os.environ["SUPABASE_URL"])
+        prefix = f"/storage/v1/object/public/{SUPABASE_BUCKET}/"
+        if parsed.netloc != expected.netloc or not parsed.path.startswith(prefix):
+            raise ResumeProcessingError("Invalid resume storage reference")
+        path = unquote(parsed.path[len(prefix):])
+    if not path.startswith(f"{user_id}/") or any(part in ("", ".", "..") for part in path.split("/")):
+        raise ResumeProcessingError("Invalid resume storage owner")
+    return path
 
 
-# =========================================================
-# CONFIG
-# =========================================================
-SUPABASE_BUCKET = "resumes"
+def remove_storage_file(bucket, path: str):
+    from storage3.exceptions import StorageApiError
+
+    removed = bucket.remove([path])
+    if removed:
+        return
+    # Storage can return an empty deletion result without raising an error.
+    # Distinguish an already-missing file (retry) from an unsuccessful deletion.
+    try:
+        bucket.info(path)
+    except StorageApiError as exc:
+        if str(exc.status) == "404" or exc.code in ("NoSuchKey", "Object not found", "not_found"):
+            return
+        raise
+    raise ResumeProcessingError("Storage did not confirm file deletion")
 
 
-# =========================================================
-# 1. UPLOAD FILE TO SUPABASE STORAGE
-# =========================================================
-def upload_resume_to_storage(
-    supabase: Client,
-    file_path: str,
-    user_id: str
-) -> Dict[str, Any]:
+def process_resume_upload(supabase: Client, file_path: str, user_id: str,
+                          original_filename: str) -> Dict[str, Any]:
+    import logging
 
-    """
-    Upload resume file to Supabase Storage
-    and return file metadata.
-    """
-
-    file_name = os.path.basename(file_path)
-
-    file_extension = file_name.split(".")[-1]
-
-    unique_filename = (
-        f"{user_id}/{uuid.uuid4()}.{file_extension}"
-    )
-
-    # Read file bytes
-    with open(file_path, "rb") as f:
-        file_bytes = f.read()
-
-    # Upload to bucket
-    supabase.storage.from_(SUPABASE_BUCKET).upload(
-        path=unique_filename,
-        file=file_bytes,
-        file_options={
-            "content-type": (
-                "application/pdf"
-                if file_extension == "pdf"
-                else "application/octet-stream"
-            )
-        }
-    )
-
-    # Get public URL
-    file_url = (
-        supabase
-        .storage
-        .from_(SUPABASE_BUCKET)
-        .get_public_url(unique_filename)
-    )
-
-    return {
-        "filename": file_name,
-        "file_url": file_url,
-        "filetype": file_extension,
-        "storage_path": unique_filename
-    }
-
-
-# =========================================================
-# 2. STORE RESUME FILE DETAILS
-# =========================================================
-def create_resume_record(
-    supabase: Client,
-    user_id: str,
-    file_metadata: Dict[str, Any],
-    is_generated: bool = False
-) -> Dict[str, Any]:
-
-    """
-    Create record in resumes table.
-    """
-
-    payload = {
-        "user_id": user_id,
-        "filename": file_metadata["filename"],
-        "file_url": file_metadata["file_url"],
-        "filetype": file_metadata["filetype"],
-        "is_generated": is_generated,
-        "active": True
-    }
-
-    response = (
-        supabase
-        .table("resumes")
-        .insert(payload)
-        .execute()
-    )
-
-    if not response.data:
-        raise Exception(
-            "Failed to create resume record"
-        )
-
-    return response.data[0]
-
-
-# =========================================================
-# 3. STORE STRUCTURED RESUME CONTENT
-# =========================================================
-def create_resume_content_record(
-    supabase: Client,
-    resume_id: str,
-    extracted_data: Dict[str, Any]
-) -> Dict[str, Any]:
-
-    """
-    Store extracted structured resume details
-    into resume_content table.
-    """
-
-    payload = {
-        "resume_id": resume_id,
-
-        "summary": extracted_data.get("summary"),
-
-        "skills": extracted_data.get(
-            "skills",
-            []
-        ),
-
-        "experience": extracted_data.get(
-            "experience",
-            []
-        ),
-
-        "education": extracted_data.get(
-            "education",
-            []
-        ),
-
-        "projects": extracted_data.get(
-            "projects",
-            []
-        ),
-
-        "certifications": extracted_data.get(
-            "certifications",
-            []
-        ),
-
-        "achievements": extracted_data.get(
-            "achievements",
-            []
-        ),
-
-        "languages": extracted_data.get(
-            "languages",
-            []
-        )
-    }
-
-    response = (
-        supabase
-        .table("resume_content")
-        .insert(payload)
-        .execute()
-    )
-
-    if not response.data:
-        raise Exception(
-            "Failed to create resume content"
-        )
-
-    return response.data[0]
-
-
-# =========================================================
-# 4. COMPLETE PIPELINE
-# =========================================================
-def process_resume_upload(
-    supabase: Client,
-    file_path: str,
-    user_id: str
-) -> Dict[str, Any]:
-
-    """
-    Complete Resume Upload Pipeline
-
-    Steps:
-    1. Upload file to Supabase Storage
-    2. Extract structured resume data
-    3. Create resumes table record
-    4. Create resume_content record
-    """
-
-    # =====================================
-    # STEP 1 → UPLOAD FILE
-    # =====================================
-    file_metadata = upload_resume_to_storage(
-        supabase=supabase,
-        file_path=file_path,
-        user_id=user_id
-    )
-
-    # =====================================
-    # STEP 2 → EXTRACT RESUME DATA
-    # =====================================
-    extracted_data = extract_resume_details(
-        file_path=file_path
-    )
-
-    # =====================================
-    # STEP 3 → CREATE RESUME RECORD
-    # =====================================
-    resume_record = create_resume_record(
-        supabase=supabase,
-        user_id=user_id,
-        file_metadata=file_metadata
-    )
-
-    resume_id = resume_record["id"]
-
-    # =====================================
-    # STEP 4 → CREATE CONTENT RECORD
-    # =====================================
-    content_record = create_resume_content_record(
-        supabase=supabase,
-        resume_id=resume_id,
-        extracted_data=extracted_data
-    )
-
-    return {
-        "resume": resume_record,
-        "content": content_record
-    }
-
-
-# ==========================================
-# EXAMPLE USAGE
-# ==========================================
-if __name__ == "__main__":
-
-    result = extract_resume_details(
-        "Pranavkrishna_Software-Engineer _1 page.pdf"
-    )
-
-    print(result)
+    # Extract first: provider failures must not leave Supabase objects behind.
+    extracted = extract_resume_details(file_path)
+    filename = original_filename.replace("\\", "/").split("/")[-1]
+    extension = filename.rsplit(".", 1)[-1].lower()
+    resume_id = str(uuid.uuid4())
+    storage_path = f"{user_id}/{resume_id}.{extension}"
+    bucket = supabase.storage.from_(SUPABASE_BUCKET)
+    storage_attempted = record_attempted = False
+    phase = "storage upload"
+    try:
+        storage_attempted = True
+        with open(file_path, "rb") as file:
+            bucket.upload(path=storage_path, file=file.read(), file_options={
+                "content-type": {"pdf": "application/pdf", "doc": "application/msword",
+                                "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}[extension]
+            })
+        record_attempted = True
+        phase = "resume record insert"
+        result = supabase.table("resumes").insert({
+            "id": resume_id, "user_id": user_id, "filename": filename,
+            "file_url": f"storage://{SUPABASE_BUCKET}/{storage_path}",
+            "filetype": extension, "is_generated": False, "active": True,
+        }).execute()
+        if not result.data:
+            raise ResumeProcessingError("Failed to save resume")
+        phase = "resume content insert"
+        content = supabase.table("resume_content").insert({
+            "resume_id": resume_id,
+            **{key: extracted[key] for key in ("summary", *CONTENT_LISTS)},
+        }).execute()
+        if not content.data:
+            raise ResumeProcessingError("Failed to save resume content")
+        return {"resume": normalize_resume({**result.data[0], "resume_content": content.data}),
+                "content": normalize_content(content.data[0])}
+    except Exception as error:
+        logging.getLogger(__name__).error("Resume processing failed at %s (%s, code=%s)",
+                                         phase, type(error).__name__, getattr(error, "code", None))
+        cleanup_errors = []
+        # Include uncertain writes: generated IDs/paths are known before any request.
+        if record_attempted:
+            for table, column in (("resume_content", "resume_id"), ("resumes", "id")):
+                try:
+                    query = supabase.table(table).delete().eq(column, resume_id)
+                    if table == "resumes":
+                        query = query.eq("user_id", user_id)
+                    query.execute()
+                except Exception:
+                    cleanup_errors.append(table)
+        if storage_attempted:
+            try:
+                remove_storage_file(bucket, storage_path)
+            except Exception:
+                cleanup_errors.append("storage")
+        if cleanup_errors:
+            logging.getLogger(__name__).error("Resume cleanup incomplete: %s (%s)", resume_id, cleanup_errors)
+            raise ResumeProcessingError("Upload failed and cleanup is incomplete. Please contact support.") from error
+        raise ResumeProcessingError("Resume processing failed. Please try again.") from error
