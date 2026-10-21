@@ -27,11 +27,11 @@ async function refreshSession(oldSession) {
   return refreshPromise;
 }
 
-async function authorizedRequest(path, body) {
+async function authorizedRequest(path, body, method = "POST") {
   let { session } = await chrome.storage.session.get("session");
   if (!session) throw new Error("Sign in to Applyr first.");
   const send = () => fetch(API_URL + path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
     body: JSON.stringify(body),
   });
@@ -75,6 +75,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return { signedIn: false };
     }
     if (message.action === "saveJob") return authorizedRequest("/api/applications/extract", { text: message.text });
+    if (message.action === "listResumes") return authorizedRequest("/api/resumes/", undefined, "GET");
+    if (message.action === "listApplications") return authorizedRequest("/api/applications/owned", undefined, "GET");
+    if (["saveApplicationDraft", "confirmSubmission"].includes(message.action)) {
+      if (!/^[0-9a-f-]{36}$/i.test(message.application_id || "")) throw new Error("Invalid application ID");
+      return message.action === "saveApplicationDraft"
+        ? authorizedRequest("/api/applications/drafts/" + message.application_id, message.draft, "PUT")
+        : authorizedRequest("/api/applications/" + message.application_id + "/confirm-submission", {});
+    }
+    if (message.action === "resolveAutofill") return authorizedRequest("/api/autofill/resolve", {
+      resume_id: message.resume_id, fields: message.fields, generate_drafts: message.generate_drafts === true,
+    });
     throw new Error("Unknown action");
   })().then(data => sendResponse({ data }), error => sendResponse({ error: error.message }));
   return true;

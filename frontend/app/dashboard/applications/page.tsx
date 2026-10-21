@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Plus, Search, Filter, MoreVertical, Eye, Trash2, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { applicationsApi, Application } from '@/lib/applications-api'
+import { applicationsApi, Application, ReviewedAnswer } from '@/lib/applications-api'
 
 const statusColors: Record<string, string> = {
   applied: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
@@ -22,16 +22,18 @@ export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchApplications() {
       if (!user) return
       
       try {
+        setLoadError(null)
         const apps = await applicationsApi.getUserApplications(user.id)
         setApplications(apps)
       } catch (err) {
-        console.error("Failed to load applications:", err)
+        setLoadError(err instanceof Error ? err.message : 'Could not load applications. Reload to try again.')
       } finally {
         setIsLoading(false)
       }
@@ -71,6 +73,7 @@ export default function ApplicationsPage() {
         </div>
 
         {/* Applications Table */}
+        {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
         <Card className="bg-card border border-border rounded-xl shadow-soft overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -99,7 +102,7 @@ export default function ApplicationsPage() {
                 ) : applications.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
-                      No applications found. Use the chrome extension to add some!
+                      {loadError ? 'Applications could not be loaded.' : 'No applications found. Use the chrome extension to add some!'}
                     </td>
                   </tr>
                 ) : (
@@ -195,6 +198,24 @@ export default function ApplicationsPage() {
                   <p className="text-sm text-muted-foreground whitespace-pre-line">{selectedApp.job_description}</p>
                 </div>
               )}
+
+              <section className="space-y-3 border-t border-border pt-4">
+                <h3 className="text-sm font-semibold">Resume and reviewed answers</h3>
+                <p className="text-sm text-muted-foreground">
+                  Resume: {selectedApp.response?.resume_filename || selectedApp.resume_id || 'Not linked'}
+                </p>
+                {typeof selectedApp.response?.job_url === 'string' && /^https?:\/\//i.test(selectedApp.response.job_url) && (
+                  <a href={selectedApp.response.job_url} target="_blank" rel="noopener noreferrer" className="text-sm underline">Open job posting</a>
+                )}
+                <p className="text-xs text-muted-foreground">These are the answers saved from your review. Changes made directly on the employer’s website are not captured.</p>
+                {selectedApp.response?.version === 1 && Array.isArray(selectedApp.response.answers) && selectedApp.response.answers.length > 0
+                  ? selectedApp.response.answers.map((answer: ReviewedAnswer, index: number) => (
+                    <div key={index} className="rounded-lg border border-border p-3">
+                      <h4 className="text-sm font-medium">{answer.label}</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{answer.value}</p>
+                    </div>
+                  )) : <p className="text-sm text-muted-foreground">No reviewed answers saved yet.</p>}
+              </section>
 
               {selectedApp.company_description && (
                 <div>

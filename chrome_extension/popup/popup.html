@@ -75,7 +75,32 @@
 
   </div>
 
+  <section id="autofillPanel" class="hidden">
+    <h2>Application draft</h2>
+    <label for="savedApplication">Continue saved application</label>
+    <select id="savedApplication"><option value="">New application</option></select>
+    <button id="refreshApplications" type="button">Refresh applications</button>
+    <label for="draftRole">Job role</label><input id="draftRole" maxlength="300">
+    <label for="draftCompany">Company</label><input id="draftCompany" maxlength="300">
+    <label for="draftUrl">Job URL</label><input id="draftUrl" type="url">
+    <label for="draftDescription">Job description</label><textarea id="draftDescription" maxlength="30000"></textarea>
+    <p id="draftState">New draft</p>
+    <button id="saveDraftBtn" class="btn-primary" type="button">Save reviewed answers as draft</button>
+    <p>Save any changes before confirming. This records your confirmation; it does not submit the website.</p>
+    <button id="confirmSubmissionBtn" class="btn-primary" type="button" disabled>I submitted this application</button>
+    <h2>Fill application</h2>
+    <label for="resumeSelect">Use resume</label>
+    <select id="resumeSelect"></select>
+    <button id="reloadResumes" type="button">Refresh resumes</button>
+    <label><input id="enableDrafts" type="checkbox"> Generate AI drafts (sends question labels and relevant resume sections to Groq)</label>
+    <button id="scanBtn" class="btn-primary" type="button">Find answers</button>
+    <p>Review and select each answer. Existing answers are preserved. Applyr never submits the form.</p>
+    <div id="answerReview"></div>
+    <button id="applyBtn" class="btn-primary" type="button" disabled>Fill selected answers</button>
+  </section>
   <script src="popup.js"></script>
+  <script src="tracking.js"></script>
+  <script src="autofill.js"></script>
 
 </body>
 </html>

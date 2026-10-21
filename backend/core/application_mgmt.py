@@ -65,6 +65,7 @@ def create_application(
         "company_description": extracted.company_description,
         "final_date": extracted.final_date.isoformat() if extracted.final_date else None,
         "status": "draft",
+        "applied_at": None,
         "response": None,
     }
 

@@ -42,6 +42,7 @@ export interface CertificationItem {
 }
 
 export interface ResumeContent {
+  contact?: Partial<Record<'name' | 'first_name' | 'last_name' | 'email' | 'phone_number' | 'location' | 'linkedin' | 'github' | 'portfolio', string | null>>
   id: string
   resume_id: string
   summary: string | null

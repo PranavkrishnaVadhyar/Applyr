@@ -1,5 +1,19 @@
 import { apiClient } from './api-client'
 
+export interface ReviewedAnswer {
+  label: string
+  value: string
+  field_type: string
+  page_url: string
+}
+
+export interface SavedApplicationAnswers {
+  version: 1
+  job_url: string
+  resume_filename?: string
+  answers: ReviewedAnswer[]
+}
+
 export interface Application {
   id: string
   user_id: string
@@ -11,7 +25,7 @@ export interface Application {
   final_date?: string | null
   response?: Record<string, any> | null
   status: string
-  applied_at: string
+  applied_at: string | null
   created_at: string
   updated_at: string
 }

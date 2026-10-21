@@ -142,6 +142,11 @@ class CertificationItem(BaseModel):
 # STRUCTURED RESUME SCHEMA
 # ==========================================
 class ResumeExtractSchema(BaseModel):
+    first_name: Optional[str] = Field(default=None, description="Given name only when unambiguous; do not guess name ordering")
+    last_name: Optional[str] = Field(default=None, description="Family name only when unambiguous; do not guess name ordering")
+    linkedin: Optional[str] = Field(default=None, description="Candidate LinkedIn URL, only if explicitly present")
+    github: Optional[str] = Field(default=None, description="Candidate GitHub profile URL, only if explicitly present")
+    portfolio: Optional[str] = Field(default=None, description="Candidate portfolio URL, only if explicitly present")
 
     # ======================================
     # BASIC INFO
@@ -369,6 +374,7 @@ def process_resume_upload(supabase: Client, file_path: str, user_id: str,
             raise ResumeProcessingError("Failed to save resume")
         phase = "resume content insert"
         content = supabase.table("resume_content").insert({
+            "contact": {key: extracted.get(key) for key in ("name", "first_name", "last_name", "email", "phone_number", "location", "linkedin", "github", "portfolio")},
             "resume_id": resume_id,
             **{key: extracted[key] for key in ("summary", *CONTENT_LISTS)},
         }).execute()

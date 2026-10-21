@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uvicorn
-from routes import applications, auth, analytics, users, resumes
+from routes import applications, auth, analytics, users, resumes, autofill
 
 
 # Initialize FastAPI app
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.user_router, prefix="/api/users", tags=["users"])
 app.include_router(resumes.router, prefix="/api/resumes", tags=["resumes"])
+app.include_router(autofill.router, prefix="/api/autofill", tags=["autofill"])
 app.include_router(applications.router, prefix="/api/applications", tags=["applications"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 

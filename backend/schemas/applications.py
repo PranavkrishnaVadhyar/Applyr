@@ -1,7 +1,4 @@
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict, HttpUrl
 from typing import Optional, Dict
 from datetime import date, datetime
 from uuid import UUID
@@ -54,5 +51,23 @@ class ApplicationUpdate(BaseModel):
     resume_id: Optional[UUID] = None
     status: Optional[str] = None
     response: Optional[Dict] = None
+
+
+class ReviewedAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=1, max_length=500)
+    value: str = Field(min_length=1, max_length=10000)
+    field_type: str = Field(max_length=30)
+    page_url: HttpUrl
+
+
+class ApplicationDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    resume_id: UUID
+    job_role: str = Field(min_length=1, max_length=300)
+    company_name: str = Field(min_length=1, max_length=300)
+    job_description: str = Field(default="", max_length=30000)
+    job_url: HttpUrl
+    answers: list[ReviewedAnswer] = Field(default_factory=list, max_length=100)
 
 

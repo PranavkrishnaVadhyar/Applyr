@@ -4,10 +4,24 @@ from datetime import datetime
 from core.resume_mgmt import ExperienceItem, EducationItem, ProjectItem, CertificationItem
 
 
+class ResumeContact(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str | None = Field(default=None, max_length=300)
+    first_name: str | None = Field(default=None, max_length=300)
+    last_name: str | None = Field(default=None, max_length=300)
+    email: str | None = Field(default=None, max_length=300)
+    phone_number: str | None = Field(default=None, max_length=100)
+    location: str | None = Field(default=None, max_length=300)
+    linkedin: str | None = Field(default=None, max_length=1000)
+    github: str | None = Field(default=None, max_length=1000)
+    portfolio: str | None = Field(default=None, max_length=1000)
+
+
 class ResumeContentUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     summary: str | None = None
+    contact: ResumeContact = Field(default_factory=ResumeContact)
     skills: list[str] | None = None
     experience: list[ExperienceItem] | None = None
     education: list[EducationItem] | None = None
@@ -23,6 +37,7 @@ class ResumeContentUpdate(BaseModel):
 
 
 class ResumeContentResponse(BaseModel):
+    contact: ResumeContact = Field(default_factory=ResumeContact)
     id: UUID
     resume_id: UUID
     summary: str | None = None

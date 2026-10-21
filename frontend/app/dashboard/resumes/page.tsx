@@ -73,6 +73,7 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
   }
 
   const [form, setForm] = useState<ResumeContentUpdate>({
+    contact: content.contact ?? {},
     summary: content.summary ?? '',
     skills: content.skills ?? [],
     experience: content.experience ?? [],
@@ -164,6 +165,17 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
 
           {/* Summary */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold">Contact details for autofill</h3>
+            <p className="text-xs text-muted-foreground">Check extracted details and save corrections. The extension asks you to review each answer before filling it.</p>
+            {(['name', 'first_name', 'last_name', 'email', 'phone_number', 'location', 'linkedin', 'github', 'portfolio'] as const).map(key => (
+              <label key={key} className="block text-sm">
+                {key.replaceAll('_', ' ')}
+                <Input value={form.contact?.[key] ?? ''}
+                  onChange={event => set('contact', { ...form.contact, [key]: event.target.value })} />
+              </label>
+            ))}
+          </section>
           <section>
             <h3 className="text-sm font-semibold text-foreground mb-3 uppercase tracking-wider">Summary</h3>
             <textarea

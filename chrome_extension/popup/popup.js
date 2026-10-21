@@ -21,6 +21,7 @@ async function updateSession() {
   loginForm.classList.toggle("hidden", signedIn);
   logoutBtn.classList.toggle("hidden", !signedIn);
   extractBtn.classList.toggle("hidden", !signedIn);
+  document.dispatchEvent(new CustomEvent("applyrSession", { detail: { signedIn } }));
 }
 
 loginForm.addEventListener("submit", async (event) => {
@@ -43,6 +44,7 @@ logoutBtn.addEventListener("click", async () => {
 });
 
 function displayResult(data) {
+  document.dispatchEvent(new CustomEvent("applyrSavedJob", { detail: data }));
   for (const [id, key] of Object.entries({
     jobRole: "job_role", jobDescription: "job_description",
     companyName: "company_name", companyDescription: "company_description", finalDate: "final_date",

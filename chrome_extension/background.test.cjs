@@ -22,6 +22,38 @@ function setup(fetch) {
 }
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status })
 
+test('draft and submission operations use authenticated dedicated endpoints', async () => {
+  const calls = []
+  const { send, stored } = setup(async (url, options) => { calls.push({ url, options }); return json({ id: 'saved' }) })
+  stored.session = { access_token: 'access', refresh_token: 'refresh' }
+  const id = '11111111-1111-4111-8111-111111111111'
+  await send({ action: 'listApplications' })
+  await send({ action: 'saveApplicationDraft', application_id: id, draft: { answers: [] } })
+  await send({ action: 'confirmSubmission', application_id: id })
+  assert.equal(calls[0].options.method, 'GET')
+  assert.equal(calls[1].options.method, 'PUT')
+  assert.ok(calls[1].url.endsWith('/drafts/' + id))
+  assert.ok(calls[2].url.endsWith('/' + id + '/confirm-submission'))
+  assert.equal(calls[2].options.headers.Authorization, 'Bearer access')
+  assert.ok((await send({ action: 'confirmSubmission', application_id: '../bad' })).error)
+  assert.equal(calls.length, 3)
+})
+
+test('autofill lists owned resumes with GET and sends bounded resolver contract', async () => {
+  const { send, stored } = setup(async (url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer access')
+    if (url.endsWith('/api/resumes/')) {
+      assert.equal(options.method, 'GET'); assert.equal(options.body, undefined); return json([])
+    }
+    assert.ok(url.endsWith('/api/autofill/resolve'))
+    assert.deepEqual(JSON.parse(options.body), { resume_id: 'resume', fields: [], generate_drafts: false })
+    return json({ results: [] })
+  })
+  stored.session = { access_token: 'access', refresh_token: 'refresh' }
+  assert.ok((await send({ action: 'listResumes' })).data)
+  assert.ok((await send({ action: 'resolveAutofill', resume_id: 'resume', fields: [], user_id: 'attacker' })).data)
+})
+
 test('page content scripts cannot call authenticated extension operations', () => {
   const { listener } = setup(() => { throw new Error('must not fetch') })
   assert.equal(listener({ action: 'saveJob' }, { id: 'extension-id', url: 'https://jobs.example.com' }, () => assert.fail()), undefined)

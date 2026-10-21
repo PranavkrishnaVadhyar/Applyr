@@ -221,3 +221,13 @@ body {
 }
 #loginForm input { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 12px; padding: 9px; border-radius: 6px; border: 1px solid #666; }
 #logoutBtn { margin-bottom: 12px; }
+/* Review controls remain readable for long answers and source excerpts. */
+#autofillPanel { margin-top: 20px; }
+#autofillPanel select, #autofillPanel textarea { width: 100%; margin: 8px 0; padding: 8px; }
+#autofillPanel textarea { min-height: 90px; }
+#autofillPanel > input { width: 100%; padding: 8px; }
+#draftState { margin: 10px 0; }
+#saveDraftBtn, #confirmSubmissionBtn { margin: 8px 0; }
+#autofillPanel label { display: block; margin: 8px 0; }
+.answer-card { border: 1px solid #8886; border-radius: 8px; padding: 12px; margin: 12px 0; }
+.answer-source { font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }

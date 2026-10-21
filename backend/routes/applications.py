@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from uuid import UUID, uuid4
+from datetime import datetime, timezone
 from typing import List
 from starlette.concurrency import run_in_threadpool
 from db.database import get_supabase
@@ -8,12 +9,67 @@ from schemas.applications import (
     ApplicationCreate,
     ApplicationUpdate,
     ApplicationResponse,
-    ExtensionExtractionRequest
+    ExtensionExtractionRequest,
+    ApplicationDraft,
 )
 from core.application_mgmt import extract_application_fields, create_application as core_create_application
 from core.security import get_current_user
 
 router = APIRouter()
+
+
+def owned_application(db, application_id, user_id):
+    rows = db.table("applications").select("*").eq("id", str(application_id)).eq("user_id", str(user_id)).limit(1).execute().data
+    if not rows:
+        raise HTTPException(404, "Application not found")
+    return rows[0]
+
+
+@router.get("/owned", response_model=List[ApplicationResponse])
+def list_owned(current_user: UUID = Depends(get_current_user), supabase: Client = Depends(get_supabase)):
+    return supabase.table("applications").select("*").eq("user_id", str(current_user)).order("created_at", desc=True).execute().data
+
+
+@router.put("/drafts/{application_id}", response_model=ApplicationResponse)
+def save_draft(application_id: UUID, payload: ApplicationDraft,
+               current_user: UUID = Depends(get_current_user), supabase: Client = Depends(get_supabase)):
+    resume = supabase.table("resumes").select("id, filename").eq("id", str(payload.resume_id)).eq("user_id", str(current_user)).limit(1).execute().data
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+    existing = supabase.table("applications").select("*").eq("id", str(application_id)).eq("user_id", str(current_user)).limit(1).execute().data
+    if existing and existing[0]["status"] != "draft":
+        raise HTTPException(409, "Submitted applications cannot be overwritten by a draft")
+    data = {"resume_id": str(payload.resume_id), "job_role": payload.job_role,
+            "company_name": payload.company_name, "job_description": payload.job_description,
+            "status": "draft", "applied_at": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "response": {"version": 1, "job_url": str(payload.job_url),
+                         "resume_filename": resume[0].get("filename"),
+                         "answers": [answer.model_dump(mode="json") for answer in payload.answers]}}
+    if existing:
+        result = supabase.table("applications").update(data).eq("id", str(application_id)).eq("user_id", str(current_user)).eq("status", "draft").execute()
+    else:
+        try:
+            result = supabase.table("applications").insert({**data, "id": str(application_id), "user_id": str(current_user)}).execute()
+        except Exception:
+            # A retry uses the same UUID. Never create another record after an uncertain write.
+            raise HTTPException(409, "Could not create draft. Refresh saved applications before retrying.")
+    if not result.data:
+        raise HTTPException(409, "Application changed. Reload before saving.")
+    return result.data[0]
+
+
+@router.post("/{application_id}/confirm-submission", response_model=ApplicationResponse)
+def confirm_submission(application_id: UUID, current_user: UUID = Depends(get_current_user),
+                       supabase: Client = Depends(get_supabase)):
+    existing = owned_application(supabase, application_id, current_user)
+    if existing["status"] != "draft":
+        return existing
+    if not existing.get("resume_id"):
+        raise HTTPException(409, "Save a draft with a selected resume first")
+    now = datetime.now(timezone.utc).isoformat()
+    result = supabase.table("applications").update({"status": "applied", "applied_at": now, "updated_at": now}).eq("id", str(application_id)).eq("user_id", str(current_user)).eq("status", "draft").execute()
+    return result.data[0] if result.data else owned_application(supabase, application_id, current_user)
 
 
 def verify_resume_owner(supabase: Client, resume_id: UUID | None, user_id: UUID):
