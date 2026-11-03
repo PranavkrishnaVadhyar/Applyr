@@ -8,21 +8,20 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: '--font-space
 const inter = Inter({ subsets: ["latin"], variable: '--font-inter', weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {
-  title: 'Applyr - AI Job Application Automation',
-  description: 'Automate your job applications with AI-powered extraction and management tools',
-  generator: 'v0.app',
+  title: 'Applyr — Apply with less repetition',
+  description: 'Review resume-based answers, fill supported application forms and keep your job search organized.',
   icons: {
     icon: [
       {
-        url: '/icon-light-32x32.png',
+        url: '/applyr-mark.svg',
         media: '(prefers-color-scheme: light)',
       },
       {
-        url: '/icon-dark-32x32.png',
+        url: '/applyr-mark.svg',
         media: '(prefers-color-scheme: dark)',
       },
       {
-        url: '/icon.svg',
+        url: '/applyr-mark.svg',
         type: 'image/svg+xml',
       },
     ],
@@ -42,8 +41,8 @@ export default function RootLayout({
       <body className={`${spaceGrotesk.variable} ${inter.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          forcedTheme="dark"
+          defaultTheme="system"
+          enableSystem
           disableTransitionOnChange
         >
           <AuthProvider>

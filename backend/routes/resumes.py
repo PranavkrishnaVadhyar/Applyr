@@ -77,14 +77,14 @@ def get_resume(resume_id: UUID, current_user: UUID = Depends(get_current_user),
 
 @router.get("/{resume_id}/download")
 def download_resume(resume_id: UUID, response: Response, current_user: UUID = Depends(get_current_user),
-                    supabase: Client = Depends(get_supabase)):
+                    supabase: Client = Depends(get_supabase), download: bool = True):
     resume = owned_resume(supabase, resume_id, current_user)
     try:
         path = storage_path_for_resume(resume, str(current_user))
         if not path:
             raise HTTPException(404, "Original resume file is unavailable")
         result = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
-            path, 60, {"download": resume["filename"]})
+            path, 60, {"download": resume["filename"]} if download else {})
         if not result.get("signedURL"):
             raise RuntimeError("Missing signed URL")
         response.headers["Cache-Control"] = "no-store"

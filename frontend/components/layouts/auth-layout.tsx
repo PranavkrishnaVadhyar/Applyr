@@ -1,35 +1,7 @@
 import { ReactNode } from 'react'
-
+import Link from 'next/link'
+import { Brand } from '@/components/brand'
+import { ThemeSelect } from '@/components/theme-select'
 export function AuthLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">
-        {/* Decorative background elements */}
-        <div className="absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
-        </div>
-
-        {/* Logo and branding */}
-        <div className="mb-8 text-center">
-          <h1 className="font-display text-3xl font-bold text-foreground mb-2">
-            Applyr
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            AI-Powered Job Application Automation
-          </p>
-        </div>
-
-        {/* Form container */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-soft">
-          {children}
-        </div>
-
-        {/* Footer text */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          By continuing, you agree to our Terms of Service and Privacy Policy
-        </p>
-      </div>
-    </div>
-  )
+  return <div className="min-h-screen bg-background flex flex-col"><header className="p-6 flex justify-between items-center"><Brand /><ThemeSelect /></header><main className="flex-1 flex items-center justify-center px-5 py-12"><div className="w-full max-w-md"><p className="text-sm text-primary font-medium mb-3">Less repetition. More possibility.</p><div className="rounded-2xl border bg-card p-6 sm:p-8 shadow-soft">{children}</div><p className="text-sm text-muted-foreground text-center mt-6">You stay in control of every application.</p><Link href="/data" className="block text-center text-sm text-primary underline underline-offset-4 mt-2">How your data is used</Link></div></main></div>
 }

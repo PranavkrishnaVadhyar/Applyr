@@ -26,11 +26,14 @@ export interface Application {
   response?: Record<string, any> | null
   status: string
   applied_at: string | null
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 class ApplicationsApi {
+  async updateStatus(applicationId: string, status: string): Promise<Application> {
+    return apiClient.put<Application>(`/api/applications/${applicationId}`, { status })
+  }
   /**
    * Fetch all applications for a specific user ID.
    */

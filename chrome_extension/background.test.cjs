@@ -98,3 +98,17 @@ test('failed remote logout still removes local extension session', async () => {
   await send({ action: 'logout' })
   assert.equal(stored.session, undefined)
 })
+
+test('workspace recovery is account scoped, bounded and cleared by logout', async () => {
+  const { send, stored } = setup(async () => json({}))
+  stored.session = { user_id: 'owner', access_token: 'access' }
+  assert.ok((await send({ action: 'saveWorkspace', owner: 'foreign', snapshot: {} })).error)
+  const snapshot = { job_role: 'Engineer', pending: [{ value: 'Unsaved edit' }] }
+  assert.equal((await send({ action: 'saveWorkspace', owner: 'owner', snapshot })).data.saved, true)
+  assert.deepEqual((await send({ action: 'loadWorkspace', owner: 'owner' })).data, snapshot)
+  stored.session.user_id = 'other'
+  assert.equal((await send({ action: 'loadWorkspace', owner: 'other' })).data, null)
+  assert.ok((await send({ action: 'saveWorkspace', owner: 'other', snapshot: { text: 'x'.repeat(1200001) } })).error)
+  await send({ action: 'logout' })
+  assert.equal(stored.workspaceProgress, undefined)
+})

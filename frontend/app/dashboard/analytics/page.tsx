@@ -106,7 +106,7 @@ export default function AnalyticsPage() {
       icon: BarChart3,
     },
     {
-      label: 'Success Rate',
+      label: 'Current interview / offer share',
       value: `${data.success_rate}%`,
       change: 'interviews + offers / total',
       icon: TrendingUp,
@@ -114,11 +114,11 @@ export default function AnalyticsPage() {
     {
       label: 'Interviews',
       value: String(data.interviews),
-      change: 'reached interview stage',
+      change: 'currently in interview stage',
       icon: Target,
     },
     {
-      label: 'Avg. Response Time',
+      label: 'Average record update interval',
       value: `${data.avg_response_time} days`,
       change: 'applied → last update',
       icon: Calendar,
@@ -146,14 +146,14 @@ export default function AnalyticsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Analytics</h1>
-            <p className="text-muted-foreground mt-1">Insights on your job search performance</p>
+            <h1 className="font-display text-3xl font-bold text-foreground">Activity</h1>
+            <p className="text-muted-foreground mt-1">Activity from your saved application records</p>
           </div>
-          <Button variant="outline">
-            Export Report
-          </Button>
+
         </div>
 
+        {data.total_applications === 0 && <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">No application activity yet. Save a job in the extension to start your tracker.</div>}
+        <p className="text-sm text-muted-foreground">These summaries describe your tracker, not your chances of getting hired. Drafts are included in total records. Time intervals measure record edits, not employer replies.</p>
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {metrics.map((metric, i) => {

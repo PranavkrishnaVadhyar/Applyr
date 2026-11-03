@@ -104,7 +104,7 @@ async def resolve_fields(content, fields, generate_drafts=False):
                 value = entries[0].get(key.split(".")[1])
                 source = "education:0"
             if value and isinstance(value, str):
-                if field.type == "select-one":
+                if field.type in ("select-one", "radio", "combobox"):
                     matches = [option for option in field.options if label_key(option) == label_key(value)]
                     if len(matches) != 1:
                         result.reason = "No unique matching option"

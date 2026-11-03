@@ -54,15 +54,17 @@ scanBtn.addEventListener("click", async () => {
       const reason = document.createElement("p"); reason.textContent = answer.reason;
       card.append(heading, reason);
       const uniqueLabel = scan.fields.filter(item => item.label === field.label && item.type === field.type).length === 1;
-      const saved = uniqueLabel && typeof savedAnswerFor === "function" ? savedAnswerFor(field, scan.url) : null;
+      const pending = uniqueLabel && typeof unsavedAnswerFor === "function" ? unsavedAnswerFor(field, scan.url) : null;
+      const saved = pending ?? (uniqueLabel && typeof savedAnswerFor === "function" ? savedAnswerFor(field, scan.url) : null);
       if (answer.value != null || saved != null) {
-        const input = document.createElement(field.type === "select-one" ? "select" : "textarea");
+        const isChoice = ["select-one", "radio", "combobox"].includes(field.type);
+        const input = document.createElement(isChoice ? "select" : "textarea");
         input.setAttribute("aria-label", "Answer for " + field.label);
-        if (field.type === "select-one") for (const text of field.options) {
+        if (isChoice) for (const text of field.options) {
           const option = document.createElement("option"); option.value = text; option.textContent = text; input.append(option);
         }
         input.value = saved ?? answer.value;
-        if (saved != null) reason.textContent = "Restored saved answer. Review it again before filling.";
+        if (saved != null) reason.textContent = pending != null ? "Recovered session edit. Review it before filling." : "Restored saved answer. Review it again before filling.";
         const select = document.createElement("input"); select.type = "checkbox";
         const label = document.createElement("label"); label.append(select, document.createTextNode(" I reviewed this answer"));
         // Editing invalidates the prior review confirmation.
@@ -71,17 +73,32 @@ scanBtn.addEventListener("click", async () => {
         card.append(input, label);
         reviewedAnswers.push({ field_id: answer.field_id, label: field.label, field_type: field.type, input, select });
       }
+      const evidenceDetails = document.createElement("details");
+      const evidenceSummary = document.createElement("summary"); evidenceSummary.textContent = "See resume source";
+      evidenceDetails.append(evidenceSummary);
       for (const evidence of answer.evidence) {
         const source = document.createElement("p"); source.className = "answer-source";
-        source.textContent = evidence.id + ": " + evidence.text; card.append(source);
+        const [section, index] = evidence.id.split(":");
+        const name = section === "contact" ? "Contact details" : section.charAt(0).toUpperCase() + section.slice(1);
+        source.textContent = `Resume → ${name}${index && /^\d+$/.test(index) ? ` → Item ${Number(index) + 1}` : ""}\n${evidence.text}`; evidenceDetails.append(source);
       }
+      if (answer.evidence.length) card.append(evidenceDetails);
+      const badge = document.createElement("p"); badge.className = "answer-kind";
+      badge.textContent = saved != null ? "Your saved edit" : answer.status === "draft" ? "AI draft" : answer.status === "skipped" ? "Existing answer preserved" : answer.value != null ? "Resume fact" : "Needs your answer";
+      card.append(badge);
       review.append(card);
     }
+    const summary = document.getElementById("reviewSummary");
+    if (summary) summary.textContent = `${data.results.filter(item => item.value != null).length} suggestions · ${data.results.filter(item => item.status === "unresolved").length} need your answer · ${data.results.filter(item => item.status === "skipped").length} existing answers preserved`;
     showStatus("Review the suggestions and their resume evidence.");
   } catch (error) { showStatus(error.message, "error"); }
   finally { scanBtn.disabled = !resumeSelect.value; }
 });
-function updateApply() { applyBtn.disabled = !activeScan || !reviewedAnswers.some(item => item.select.checked && item.input.value.trim()); }
+function updateApply() {
+  const count = reviewedAnswers.filter(item => item.select.checked && item.input.value.trim()).length;
+  applyBtn.disabled = !activeScan || !count;
+  applyBtn.textContent = count ? `Fill reviewed answers (${count})` : "Fill reviewed answers";
+}
 applyBtn.addEventListener("click", async () => {
   applyBtn.disabled = true;
   const revision = reviewVersion, version = sessionVersion, scan = activeScan;

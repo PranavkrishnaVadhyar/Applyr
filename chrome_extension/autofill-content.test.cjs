@@ -28,7 +28,7 @@ function setup() {
     HTMLInputElement: Element, HTMLSelectElement: Element, HTMLTextAreaElement: Element, Event }
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'autofill-content.js'), 'utf8'), context)
   const send = message => { let result; listener(message, { id: 'extension' }, value => { result = value }); return result }
-  return { elements, location, send, scan: () => send({ action: 'scanForm' }), apply: answers => send({ action: 'applyAnswers', scan_id: 'scan-id', answers }) }
+  return { elements, location, send, document: context.document, Element, scan: () => send({ action: 'scanForm' }), apply: answers => send({ action: 'applyAnswers', scan_id: 'scan-id', answers }) }
 }
 test('scan excludes unsupported fields and applies using native events without submission', () => {
   const s = setup(); const scan = s.scan(); assert.equal(scan.fields.length, 2)
@@ -57,4 +57,50 @@ test('invalid or too-long values are not applied', () => {
   const s = setup(); s.elements[0].validity.valid = false; s.elements[1].maxLength = 2; s.scan()
   assert.equal(s.apply([{ field_id: '0', value: 'bad email' }, { field_id: '1', value: 'Too long' }]).skipped, 2)
   assert.equal(s.elements[0].value, ''); assert.deepEqual(s.elements[0].events, [])
+})
+
+test('radio groups use the question label, preserve selections and reject changed options', () => {
+  const s = setup()
+  const group = { querySelector: () => ({ textContent: 'Location' }) }
+  const radios = ['Pune', 'Delhi'].map(text => {
+    const e = new s.Element(text, 'radio'); e.name = 'location'; e.form = null; e.checked = false
+    e.closest = selector => selector.includes('fieldset') ? group : null
+    e.click = () => { radios.forEach(item => { item.checked = item === e }) }
+    return e
+  })
+  s.elements.push(...radios)
+  const scan = s.scan(); assert.equal(scan.fields.length, 3); assert.equal(scan.fields[2].label, 'Location')
+  assert.equal(s.apply([{ field_id: '2', value: 'Pune' }]).filled, 1)
+  assert.equal(radios[0].checked, true)
+  s.scan(); assert.equal(s.apply([{ field_id: '2', value: 'Delhi' }]).skipped, 1)
+  radios[0].checked = false; s.scan(); radios[1].label = 'Mumbai'
+  assert.equal(s.apply([{ field_id: '2', value: 'Pune' }]).skipped, 1)
+})
+
+test('ARIA combobox clicks only a unique visible associated option', () => {
+  const s = setup(), e = new s.Element('Location'); e.getAttribute = key => ({ role: 'combobox', 'aria-controls': 'cities' })[key] || null
+  const choices = ['Pune', 'Delhi'].map(text => {
+    const option = new s.Element(text); option.textContent = text
+    option.getAttribute = key => key === 'aria-selected' && e.value === text ? 'true' : null
+    option.click = () => { e.value = text }; return option
+  })
+  s.document.getElementById = () => ({ getAttribute: () => 'listbox', querySelectorAll: () => choices })
+  s.elements.push(e); s.scan()
+  assert.equal(s.apply([{ field_id: '2', value: 'Delhi' }]).filled, 1)
+  e.value = ''; s.scan(); choices[0].hidden = true
+  assert.equal(s.apply([{ field_id: '2', value: 'Delhi' }]).skipped, 1)
+})
+
+test('open shadow roots and same-origin frames are scanned; detached frame roots are rejected', () => {
+  const s = setup()
+  const child = new s.Element('Email', 'email')
+  const frame = new s.Element('Frame'); frame.tagName = 'IFRAME'; frame.type = 'frame'
+  frame.contentDocument = { querySelectorAll: () => [child] }
+  s.elements.push(frame)
+  assert.equal(s.scan().fields.length, 3)
+  frame.contentDocument = null
+  assert.equal(s.apply([{ field_id: '2', value: 'test@example.com' }]).skipped, 1)
+  frame.shadowRoot = { querySelectorAll: () => [child] }
+  assert.equal(s.scan().fields.length, 3)
+  assert.equal(s.apply([{ field_id: '2', value: 'test@example.com' }]).filled, 1)
 })

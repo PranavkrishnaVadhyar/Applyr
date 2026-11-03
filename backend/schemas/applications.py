@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, HttpUrl
-from typing import Optional, Dict
+from typing import Optional, Dict, Literal
 from datetime import date, datetime
 from uuid import UUID
 
@@ -49,7 +49,7 @@ class ApplicationResponse(BaseModel):
 
 class ApplicationUpdate(BaseModel):
     resume_id: Optional[UUID] = None
-    status: Optional[str] = None
+    status: Optional[Literal["draft", "applied", "interviewing", "rejected", "offer"]] = None
     response: Optional[Dict] = None
 
 

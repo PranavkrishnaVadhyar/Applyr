@@ -71,6 +71,27 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.db.table.assert_not_called()
 
+    def test_extraction_configuration_and_provider_errors_are_actionable(self):
+        from core.application_mgmt import ExtractionConfigurationError
+        for error, status, expected in [
+            (ExtractionConfigurationError(), 503, "not configured"),
+            (RuntimeError("private job text"), 502, "AI extraction service failed"),
+        ]:
+            with patch("routes.applications.extract_application_fields", new_callable=AsyncMock, side_effect=error), patch("routes.applications.core_create_application") as create:
+                response = self.client.post("/api/applications/extract", headers=self.headers, json={"text": "job"})
+            self.assertEqual(response.status_code, status)
+            self.assertIn(expected, response.json()["detail"])
+            self.assertNotIn("private job text", response.text)
+            create.assert_not_called()
+
+    def test_extraction_database_failure_is_distinguished_from_ai_failure(self):
+        extracted = ApplicationExtract(job_role="Engineer", job_description="Build", company_name="Example")
+        with patch("routes.applications.extract_application_fields", new_callable=AsyncMock, return_value=extracted), patch("routes.applications.core_create_application", side_effect=RuntimeError("private database details")):
+            response = self.client.post("/api/applications/extract", headers=self.headers, json={"text": "job"})
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("saving failed", response.json()["detail"])
+        self.assertNotIn("private database details", response.text)
+
     def test_cannot_attach_another_users_resume(self):
         self.db.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = SimpleNamespace(data=[])
         response = self.client.post("/api/applications/", headers=self.headers, json={

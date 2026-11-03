@@ -27,9 +27,10 @@ async function refreshSession(oldSession) {
   return refreshPromise;
 }
 
-async function authorizedRequest(path, body, method = "POST") {
+async function authorizedRequest(path, body, method = "POST", expectedRefreshToken = null) {
   let { session } = await chrome.storage.session.get("session");
   if (!session) throw new Error("Sign in to Applyr first.");
+  if (expectedRefreshToken && session.refresh_token !== expectedRefreshToken) throw new Error("Session changed. Arm detection again.");
   const send = () => fetch(API_URL + path, {
     method,
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
@@ -54,14 +55,17 @@ async function authorizedRequest(path, body, method = "POST") {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (["watchSubmission", "stopSubmissionWatch", "submissionWatchState"].includes(message.action)) return;
   // Only extension UI can invoke authenticated operations; never a page content script.
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL("popup/"))) return;
   (async () => {
     if (message.action === "session") {
       const { session } = await chrome.storage.session.get("session");
-      return { signedIn: !!session };
+      return { signedIn: !!session, userId: session?.user_id || null };
     }
     if (message.action === "signin") {
+      await chrome.storage.session.remove("submissionWatch");
+      await chrome.storage.session.remove("workspaceProgress");
       const session = await readResponse(await fetch(API_URL + "/api/auth/signin", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: message.email, password: message.password }),
@@ -71,10 +75,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.action === "logout") {
       try { await authorizedRequest("/api/auth/logout", {}); }
-      finally { await chrome.storage.session.remove("session"); }
+      finally { await chrome.storage.session.remove("session"); await chrome.storage.session.remove("submissionWatch"); await chrome.storage.session.remove("workspaceProgress"); }
       return { signedIn: false };
     }
     if (message.action === "saveJob") return authorizedRequest("/api/applications/extract", { text: message.text });
+    if (["saveWorkspace", "loadWorkspace"].includes(message.action)) {
+      const { session } = await chrome.storage.session.get("session");
+      if (!session?.user_id || session.user_id !== message.owner) throw new Error("Session changed. Reopen the workspace.");
+      if (message.action === "loadWorkspace") {
+        const { workspaceProgress } = await chrome.storage.session.get("workspaceProgress");
+        return workspaceProgress?.owner === session.user_id ? workspaceProgress.snapshot : null;
+      }
+      if (!message.snapshot || JSON.stringify(message.snapshot).length > 1200000) throw new Error("Workspace too large to recover. Save the draft before closing.");
+      await chrome.storage.session.set({ workspaceProgress: { owner: session.user_id, snapshot: message.snapshot } });
+      return { saved: true };
+    }
     if (message.action === "listResumes") return authorizedRequest("/api/resumes/", undefined, "GET");
     if (message.action === "listApplications") return authorizedRequest("/api/applications/owned", undefined, "GET");
     if (["saveApplicationDraft", "confirmSubmission"].includes(message.action)) {
@@ -90,3 +105,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })().then(data => sendResponse({ data }), error => sendResponse({ error: error.message }));
   return true;
 });
+if (typeof importScripts === "function") importScripts("submission-worker.js");

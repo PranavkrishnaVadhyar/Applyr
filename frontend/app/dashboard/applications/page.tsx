@@ -1,11 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { DashboardLayout } from '@/components/layouts/dashboard-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search, Filter, MoreVertical, Eye, Trash2, X } from 'lucide-react'
+import { Search, ArrowRight, FileText, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/auth-context'
 import { applicationsApi, Application, ReviewedAnswer } from '@/lib/applications-api'
 
@@ -19,10 +23,40 @@ const statusColors: Record<string, string> = {
 
 export default function ApplicationsPage() {
   const { user } = useAuth()
+  const opener = useRef<HTMLElement | null>(null)
+  const [detailTab, setDetailTab] = useState('overview')
   const [applications, setApplications] = useState<Application[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Application | null>(null)
+  const visibleApplications = applications.filter(app =>
+    (statusFilter === 'all' || app.status === statusFilter) &&
+    `${app.company_name} ${app.job_role} ${app.job_description}`.toLowerCase().includes(search.trim().toLowerCase()))
+  async function changeStatus(app: Application, status: string) {
+    setBusyId(app.id); setActionError(null)
+    try {
+      const updated = await applicationsApi.updateStatus(app.id, status)
+      setApplications(items => items.map(item => item.id === app.id ? updated : item))
+      setSelectedApp(item => item?.id === app.id ? updated : item)
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Could not update status.') }
+    finally { setBusyId(null) }
+  }
+  async function deleteApplication() {
+    if (!deleteTarget) return
+    setBusyId(deleteTarget.id); setActionError(null)
+    try {
+      await applicationsApi.deleteApplication(deleteTarget.id)
+      setApplications(items => items.filter(item => item.id !== deleteTarget.id))
+      setSelectedApp(item => item?.id === deleteTarget.id ? null : item)
+      setDeleteTarget(null)
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Could not delete application.') }
+    finally { setBusyId(null) }
+  }
 
   useEffect(() => {
     async function fetchApplications() {
@@ -46,198 +80,25 @@ export default function ApplicationsPage() {
     }
   }, [user])
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Applications</h1>
-            <p className="text-muted-foreground mt-1">Track all your job applications</p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex gap-3 flex-col sm:flex-row">
-          <div className="flex-1 relative">
-            <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search applications..."
-              className="pl-10"
-            />
-          </div>
-          <Button variant="outline" className="gap-2">
-            <Filter size={18} />
-            Filter
-          </Button>
-        </div>
-
-        {/* Applications Table */}
-        {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
-        <Card className="bg-card border border-border rounded-xl shadow-soft overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-secondary/30">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Job Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Company</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Applied</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deadline</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8">
-                      <div className="space-y-3">
-                        {[1,2,3].map(i => (
-                          <div key={i} className="h-12 bg-secondary/40 rounded-lg animate-pulse" />
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ) : applications.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
-                      {loadError ? 'Applications could not be loaded.' : 'No applications found. Use the chrome extension to add some!'}
-                    </td>
-                  </tr>
-                ) : (
-                  applications.map((app) => (
-                    <tr key={app.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors duration-150">
-                      <td className="px-6 py-4">
-                        <p className="font-medium text-foreground">{app.job_role}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-foreground text-sm">{app.company_name}</p>
-                        {app.company_description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 max-w-[200px]">{app.company_description}</p>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 hidden lg:table-cell">
-                        <p className="text-xs text-muted-foreground line-clamp-2 max-w-[250px]">{app.job_description || '—'}</p>
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground text-sm">
-                        {app.applied_at ? new Date(app.applied_at).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground text-sm">
-                        {app.final_date ? new Date(app.final_date).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusColors[app.status?.toLowerCase()] || 'bg-secondary text-muted-foreground'}`}>
-                          {app.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setSelectedApp(app)}
-                            className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors duration-150"
-                            title="View details"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button
-                            className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors duration-150"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
-
-      {/* Detail Modal */}
-      {selectedApp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedApp(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6 animate-scale-in">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <h2 className="font-display text-xl font-bold text-foreground">{selectedApp.job_role}</h2>
-                <p className="text-muted-foreground">{selectedApp.company_name}</p>
-              </div>
-              <button
-                onClick={() => setSelectedApp(null)}
-                className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusColors[selectedApp.status?.toLowerCase()] || 'bg-secondary text-muted-foreground'}`}>
-                  {selectedApp.status}
-                </span>
-                {selectedApp.applied_at && (
-                  <span className="text-xs text-muted-foreground">
-                    Applied {new Date(selectedApp.applied_at).toLocaleDateString()}
-                  </span>
-                )}
-                {selectedApp.final_date && (
-                  <span className="text-xs text-muted-foreground">
-                    • Deadline {new Date(selectedApp.final_date).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-
-              {selectedApp.job_description && (
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-1">Job Description</h3>
-                  <p className="text-sm text-muted-foreground whitespace-pre-line">{selectedApp.job_description}</p>
-                </div>
-              )}
-
-              <section className="space-y-3 border-t border-border pt-4">
-                <h3 className="text-sm font-semibold">Resume and reviewed answers</h3>
-                <p className="text-sm text-muted-foreground">
-                  Resume: {selectedApp.response?.resume_filename || selectedApp.resume_id || 'Not linked'}
-                </p>
-                {typeof selectedApp.response?.job_url === 'string' && /^https?:\/\//i.test(selectedApp.response.job_url) && (
-                  <a href={selectedApp.response.job_url} target="_blank" rel="noopener noreferrer" className="text-sm underline">Open job posting</a>
-                )}
-                <p className="text-xs text-muted-foreground">These are the answers saved from your review. Changes made directly on the employer’s website are not captured.</p>
-                {selectedApp.response?.version === 1 && Array.isArray(selectedApp.response.answers) && selectedApp.response.answers.length > 0
-                  ? selectedApp.response.answers.map((answer: ReviewedAnswer, index: number) => (
-                    <div key={index} className="rounded-lg border border-border p-3">
-                      <h4 className="text-sm font-medium">{answer.label}</h4>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{answer.value}</p>
-                    </div>
-                  )) : <p className="text-sm text-muted-foreground">No reviewed answers saved yet.</p>}
-              </section>
-
-              {selectedApp.company_description && (
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-1">About {selectedApp.company_name}</h3>
-                  <p className="text-sm text-muted-foreground whitespace-pre-line">{selectedApp.company_description}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border">
-                <div>
-                  <p className="text-xs text-muted-foreground">Created</p>
-                  <p className="text-sm text-foreground">{new Date(selectedApp.created_at).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Last Updated</p>
-                  <p className="text-sm text-foreground">{new Date(selectedApp.updated_at).toLocaleDateString()}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
-  )
+  const date = (value?: string | null) => value ? new Date(value).toLocaleDateString() : '—'
+  return <DashboardLayout><div className="space-y-6">
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-primary text-xs uppercase tracking-widest font-semibold mb-3">Keep your place</p><h1 className="font-display text-3xl font-semibold tracking-tight">Applications</h1><p className="text-muted-foreground mt-2">Every role, the answers you reviewed, and what comes next.</p></div><Button asChild variant="outline"><Link href="/dashboard/setup">Save a job with the extension</Link></Button></div>
+    <div className="rounded-xl border bg-card p-4 flex flex-wrap items-center gap-3"><div className="relative flex-1 min-w-48"><Search size={17} className="absolute left-3 top-3 text-muted-foreground" /><Input aria-label="Search applications" placeholder="Search company or role…" value={search} onChange={e => setSearch(e.target.value)} className="pl-9" /></div><select aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="all">All stages</option>{Object.keys(statusColors).map(status => <option key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</option>)}</select>{(search || statusFilter !== 'all') && <Button variant="ghost" onClick={() => { setSearch(''); setStatusFilter('all') }}>Clear filters</Button>}</div>
+    <p role="status" className="text-sm text-muted-foreground">{isLoading ? 'Loading applications…' : loadError ? 'Applications unavailable' : `${visibleApplications.length} of ${applications.length} applications`}</p>
+    {(loadError || actionError) && <p role="alert" className="text-sm text-destructive">{loadError || actionError}</p>}
+    {!isLoading && !loadError && !visibleApplications.length && <div className="rounded-xl border border-dashed p-10 text-center"><FileText className="mx-auto text-primary mb-3" size={26} /><h2 className="font-semibold">{applications.length ? 'No matching applications' : 'Make room for your next opportunity.'}</h2><p className="text-muted-foreground mt-2 text-sm">{applications.length ? 'Try another search or clear your filters.' : 'Save your first job in the extension. Your progress and reviewed answers will appear here.'}</p></div>}
+    {!!visibleApplications.length && <div className="rounded-xl border bg-card overflow-hidden"><div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 bg-secondary/50 text-xs text-muted-foreground font-medium"><span>Company & role</span><span>Stage</span><span>Applied</span><span>Updated</span><span>Details</span></div>{visibleApplications.map(app => <div key={app.id} className="flex flex-wrap md:grid md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 items-center px-5 py-5 border-t first:border-t-0"><button className="text-left min-w-0 flex-1" onClick={e => { opener.current = e.currentTarget; setSelectedApp(app); setDetailTab('overview') }}><span className="block font-medium hover:text-primary">{app.job_role}</span><span className="block text-sm text-muted-foreground">{app.company_name}</span></button><span className="capitalize text-xs font-medium rounded-full bg-secondary px-3 py-1 w-fit">{app.status}</span><span className="hidden md:block text-sm text-muted-foreground">{date(app.applied_at)}</span><span className="hidden md:block text-sm text-muted-foreground">{date(app.updated_at || app.created_at)}</span><Button variant="ghost" size="sm" aria-label={`View ${app.job_role} at ${app.company_name}`} onClick={e => { opener.current = e.currentTarget; setSelectedApp(app); setDetailTab('overview') }}><ArrowRight size={17} /></Button></div>)}</div>}
+  </div>
+    <Sheet open={!!selectedApp} onOpenChange={open => { if (!open) setSelectedApp(null) }}><SheetContent className="w-full sm:max-w-xl overflow-y-auto p-0" onCloseAutoFocus={e => { e.preventDefault(); opener.current?.focus() }}>
+      <SheetHeader className="p-6 pr-12 border-b"><SheetTitle className="font-display text-2xl">{selectedApp?.job_role}</SheetTitle><SheetDescription>{selectedApp?.company_name}</SheetDescription></SheetHeader>
+      {selectedApp && <div className="px-6 pb-8 space-y-6">{actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}<label className="flex items-center justify-between gap-4 text-sm">Stage<select value={selectedApp.status} disabled={busyId !== null} onChange={e => changeStatus(selectedApp, e.target.value)} className="border border-input bg-background rounded-md p-2">{Object.keys(statusColors).map(status => <option key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</option>)}</select></label>
+        <Tabs value={detailTab} onValueChange={setDetailTab}><TabsList className="w-full"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="answers">Answers</TabsTrigger><TabsTrigger value="resume">Resume</TabsTrigger></TabsList>
+          <TabsContent value="overview" className="space-y-5 pt-4"><dl className="grid grid-cols-2 gap-4 text-sm"><div><dt className="text-muted-foreground">Applied</dt><dd>{date(selectedApp.applied_at)}</dd></div><div><dt className="text-muted-foreground">Deadline</dt><dd>{date(selectedApp.final_date)}</dd></div></dl>{typeof selectedApp.response?.job_url === 'string' && /^https?:\/\//i.test(selectedApp.response.job_url) && <a href={selectedApp.response.job_url} target="_blank" rel="noopener noreferrer" className="text-primary text-sm underline inline-block">Open job posting ↗</a>}<div><h3 className="font-semibold mb-2">About the role</h3><p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApp.job_description || 'No description saved.'}</p></div><p className="text-xs text-muted-foreground">Applied means you marked this application as submitted, or the extension detected a supported confirmation. Check the employer’s confirmation for certainty.</p></TabsContent>
+          <TabsContent value="answers" className="space-y-4 pt-4"><p className="text-sm text-muted-foreground">Your saved reviewed answers. Edits made directly on the employer’s website are not captured.</p>{selectedApp.response?.version === 1 && Array.isArray(selectedApp.response.answers) && selectedApp.response.answers.length ? selectedApp.response.answers.filter((answer: ReviewedAnswer) => typeof answer?.label === 'string' && typeof answer?.value === 'string').map((answer: ReviewedAnswer, i: number) => <div key={i} className="rounded-lg border p-4"><h3 className="font-medium text-sm">{answer.label}</h3><p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{answer.value}</p></div>) : <div className="rounded-lg bg-secondary p-5 text-sm">No reviewed answers saved yet. Open this draft in the extension to get started.</div>}</TabsContent>
+          <TabsContent value="resume" className="space-y-4 pt-4"><FileText className="text-primary" size={28} /><h3 className="font-semibold">{typeof selectedApp.response?.resume_filename === 'string' ? selectedApp.response.resume_filename : selectedApp.resume_id ? 'Linked resume' : 'No resume linked'}</h3><p className="text-sm text-muted-foreground">The selected resume supplies your autofill facts. Review corrections in the resume library before using it again.</p><Button variant="outline" asChild><Link href="/dashboard/resumes">Open resume library</Link></Button></TabsContent>
+        </Tabs><div className="border-t pt-5"><Button variant="ghost" className="text-destructive" disabled={busyId !== null} onClick={() => setDeleteTarget(selectedApp)}><Trash2 size={16} /> Delete application</Button></div>
+      </div>}
+    </SheetContent></Sheet>
+    <Dialog open={!!deleteTarget} onOpenChange={open => { if (!open && !busyId) setDeleteTarget(null) }}><DialogContent><DialogTitle>Delete this application?</DialogTitle><DialogDescription>{deleteTarget?.job_role} at {deleteTarget?.company_name}. Its saved answers will be deleted. Your resume is kept.</DialogDescription>{actionError && <p role="alert" className="text-destructive text-sm">{actionError}</p>}<div className="flex justify-end gap-3"><Button variant="outline" disabled={busyId !== null} onClick={() => setDeleteTarget(null)}>Keep application</Button><Button variant="destructive" disabled={busyId !== null} onClick={deleteApplication}>{busyId ? 'Deleting…' : 'Delete application'}</Button></div></DialogContent></Dialog>
+  </DashboardLayout>
 }

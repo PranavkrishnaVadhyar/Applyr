@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Applyr Job Extractor",
-  "version": "1.1",
-  "description": "Extract job posting details for Applyr",
+  "name": "Applyr \u2014 Application assistant",
+  "version": "1.2",
+  "description": "Review resume-based answers, fill supported forms and keep your applications organized.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://127.0.0.1:8000/*"
@@ -15,6 +16,23 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup/popup.html"
+    "default_popup": "popup/launcher.html",
+    "default_title": "Open Applyr",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "minimum_chrome_version": "116",
+  "side_panel": {
+    "default_path": "popup/popup.html"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
   }
 }

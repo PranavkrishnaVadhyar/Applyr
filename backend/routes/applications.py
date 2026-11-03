@@ -2,9 +2,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from typing import List
+import logging
 from starlette.concurrency import run_in_threadpool
 from db.database import get_supabase
 from supabase import Client
+from postgrest.exceptions import APIError
 from schemas.applications import (
     ApplicationCreate,
     ApplicationUpdate,
@@ -12,10 +14,11 @@ from schemas.applications import (
     ExtensionExtractionRequest,
     ApplicationDraft,
 )
-from core.application_mgmt import extract_application_fields, create_application as core_create_application
+from core.application_mgmt import ExtractionConfigurationError, extract_application_fields, create_application as core_create_application
 from core.security import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def owned_application(db, application_id, user_id):
@@ -27,7 +30,17 @@ def owned_application(db, application_id, user_id):
 
 @router.get("/owned", response_model=List[ApplicationResponse])
 def list_owned(current_user: UUID = Depends(get_current_user), supabase: Client = Depends(get_supabase)):
-    return supabase.table("applications").select("*").eq("user_id", str(current_user)).order("created_at", desc=True).execute().data
+    def query(column):
+        return supabase.table("applications").select("*").eq("user_id", str(current_user)).order(column, desc=True).execute().data
+
+    try:
+        return query("created_at")
+    except APIError as error:
+        # Older deployed schemas have applied_at but no creation timestamp.
+        # Retry only this known schema mismatch, retaining the owner filter.
+        if error.code != "42703" or "applications.created_at" not in error.message:
+            raise
+        return query("applied_at")
 
 
 @router.put("/drafts/{application_id}", response_model=ApplicationResponse)
@@ -109,15 +122,36 @@ async def extract_and_create_application(
 ):
     try:
         extracted_data = await extract_application_fields(payload.text)
-        
+    except ExtractionConfigurationError:
+        logger.error("Job extraction failed: GROQ_API_KEY is not configured")
+        raise HTTPException(503, "Job extraction is not configured. Set GROQ_API_KEY on the backend and restart it.") from None
+    except Exception as error:
+        # Provider exceptions can contain prompts and credentials: never log their text.
+        status = getattr(error, "status_code", None)
+        status = status if isinstance(status, int) else None
+        logger.error("Job extraction failed: stage=ai type=%s provider_status=%s", type(error).__name__, status)
+        if status in (401, 403):
+            detail = "The AI provider rejected the backend credentials. Check the backend Groq configuration."
+        elif status == 429:
+            detail = "The AI provider is rate-limited or out of quota. Check usage and try again later."
+        elif type(error).__name__ in ("OutputParserException", "ValidationError"):
+            detail = "The AI response could not be read as job details. Open the full job posting and try again, or enter a draft manually."
+        else:
+            detail = "The AI extraction service failed. Try again later or enter a draft manually."
+        raise HTTPException(502, detail) from None
+
+    try:
         application = await run_in_threadpool(core_create_application,
             user_id=current_user,
             supabase=supabase,
             extracted=extracted_data
         )
         return application
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Job extraction failed. Please try again.")
+    except Exception as error:
+        code = getattr(error, "code", None)
+        code = code if isinstance(code, str) and code.isalnum() and len(code) <= 12 else None
+        logger.error("Job extraction failed: stage=database type=%s code=%s", type(error).__name__, code)
+        raise HTTPException(502, "Job details were extracted, but saving failed. Check the application tracker before retrying; the save may have completed. Ask the backend operator to check the database error code.") from None
 
 
 # ✅ READ ALL (for a user)
@@ -174,6 +208,16 @@ def update_application(
     supabase: Client = Depends(get_supabase),
 ):
     update_data = payload.model_dump(exclude_unset=True, mode="json")
+    if "status" in update_data or "resume_id" in update_data:
+        if "status" in update_data and payload.status is None:
+            raise HTTPException(422, "Status cannot be empty")
+        existing = owned_application(supabase, application_id, current_user)
+        next_status = update_data.get("status", existing["status"])
+        if next_status != "draft" and not update_data.get("resume_id", existing.get("resume_id")):
+            raise HTTPException(409, "Link a resume before recording a submitted application")
+        if "status" in update_data:
+            update_data["applied_at"] = None if payload.status == "draft" else (existing.get("applied_at") or datetime.now(timezone.utc).isoformat())
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     verify_resume_owner(supabase, payload.resume_id, current_user)
 
     response = (

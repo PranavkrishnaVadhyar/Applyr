@@ -99,6 +99,9 @@ class ResumesApi {
   async getDownloadUrl(resumeId: string): Promise<{ url: string; expires_in: number }> {
     return apiClient.get(`/api/resumes/${resumeId}/download`)
   }
+  async getPreviewUrl(resumeId: string): Promise<{ url: string; expires_in: number }> {
+    return apiClient.get(`/api/resumes/${resumeId}/download?download=false`)
+  }
 
   /** Delete a resume */
   async deleteResume(resumeId: string): Promise<{ message: string }> {

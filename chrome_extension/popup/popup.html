@@ -1,106 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-
-  <!-- Header -->
-  <div class="header">
-    <h1 class="header-title">Applyr</h1>
-    <span class="header-badge">Extractor</span>
-  </div>
-
-  <form id="loginForm" class="hidden">
-    <p>Sign in with your Applyr account.</p>
-    <label for="email">Email</label>
-    <input id="email" type="email" autocomplete="username" required>
-    <label for="password">Password</label>
-    <input id="password" type="password" autocomplete="current-password" required>
-    <button id="loginBtn" class="btn-primary" type="submit">Sign in</button>
-  </form>
-  <button id="logoutBtn" class="btn-primary hidden">Sign out</button>
-  <!-- Main action -->
-  <button id="extractBtn" class="btn-primary hidden">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-    </svg>
-    Extract Job
-  </button>
-
-  <!-- Status message -->
-  <div id="statusMsg" class="status-msg hidden"></div>
-
-  <!-- Results section — only shown after backend response -->
-  <div id="result" class="result-section hidden">
-
-    <div class="result-card">
-      <div class="result-field">
-        <span class="field-label">Job Role</span>
-        <p id="jobRole" class="field-value"></p>
-      </div>
-
-      <div class="result-field">
-        <span class="field-label">Job Description</span>
-        <pre id="jobDescription" class="field-value description-text"></pre>
-      </div>
-
-      <div class="result-field">
-        <span class="field-label">Company</span>
-        <p id="companyName" class="field-value"></p>
-      </div>
-
-      <div class="result-field">
-        <span class="field-label">Company Description</span>
-        <pre id="companyDescription" class="field-value description-text"></pre>
-      </div>
-
-      <div class="result-field">
-        <span class="field-label">Last Date</span>
-        <p id="finalDate" class="field-value"></p>
-      </div>
-
-      <div class="result-field">
-        <span class="field-label">Status</span>
-        <p id="status" class="field-value">
-          <span id="statusBadge" class="status-badge"></span>
-        </p>
-      </div>
-    </div>
-
-  </div>
-
-  <section id="autofillPanel" class="hidden">
-    <h2>Application draft</h2>
-    <label for="savedApplication">Continue saved application</label>
-    <select id="savedApplication"><option value="">New application</option></select>
-    <button id="refreshApplications" type="button">Refresh applications</button>
-    <label for="draftRole">Job role</label><input id="draftRole" maxlength="300">
-    <label for="draftCompany">Company</label><input id="draftCompany" maxlength="300">
-    <label for="draftUrl">Job URL</label><input id="draftUrl" type="url">
-    <label for="draftDescription">Job description</label><textarea id="draftDescription" maxlength="30000"></textarea>
-    <p id="draftState">New draft</p>
-    <button id="saveDraftBtn" class="btn-primary" type="button">Save reviewed answers as draft</button>
-    <p>Save any changes before confirming. This records your confirmation; it does not submit the website.</p>
-    <button id="confirmSubmissionBtn" class="btn-primary" type="button" disabled>I submitted this application</button>
-    <h2>Fill application</h2>
-    <label for="resumeSelect">Use resume</label>
-    <select id="resumeSelect"></select>
-    <button id="reloadResumes" type="button">Refresh resumes</button>
-    <label><input id="enableDrafts" type="checkbox"> Generate AI drafts (sends question labels and relevant resume sections to Groq)</label>
-    <button id="scanBtn" class="btn-primary" type="button">Find answers</button>
-    <p>Review and select each answer. Existing answers are preserved. Applyr never submits the form.</p>
-    <div id="answerReview"></div>
-    <button id="applyBtn" class="btn-primary" type="button" disabled>Fill selected answers</button>
-  </section>
-  <script src="popup.js"></script>
-  <script src="tracking.js"></script>
-  <script src="autofill.js"></script>
-
-</body>
-</html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Applyr workspace</title><link rel="stylesheet" href="popup.css"></head><body>
+<header class="workspace-header"><div class="brand"><img src="../icons/mark.svg" alt="" width="30" height="30"><strong>Applyr.</strong></div><button id="logoutBtn" class="quiet hidden" type="button">Sign out</button></header>
+<div id="statusMsg" class="status-msg hidden" role="status" aria-live="polite"></div>
+<form id="loginForm" class="auth-card hidden"><p class="eyebrow">A little less busywork</p><h1>Welcome back.</h1><p>Sign in to review answers from your saved resume.</p><label for="email">Email</label><input id="email" type="email" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button id="loginBtn" class="btn-primary" type="submit">Sign in</button></form>
+<section id="autofillPanel" class="hidden">
+<div class="context-header"><p class="eyebrow">Current application</p><h1 id="contextTitle">Start a new application</h1><label for="resumeSelect">Resume used for answers</label><div class="inline-control"><select id="resumeSelect"></select><button id="reloadResumes" class="quiet" type="button" aria-label="Refresh resume list">Refresh</button></div></div>
+<nav class="tabs" role="tablist" aria-label="Application workspace"><button role="tab" id="tab-job" aria-controls="view-job" aria-selected="true" data-view="job">Job</button><button role="tab" id="tab-review" aria-controls="view-review" aria-selected="false" tabindex="-1" data-view="review">Review</button><button role="tab" id="tab-activity" aria-controls="view-activity" aria-selected="false" tabindex="-1" data-view="activity">Activity</button></nav>
+<main class="workspace-body">
+<section id="view-job" role="tabpanel" aria-labelledby="tab-job" data-panel="job"><h2>Start here or continue a draft</h2><label for="savedApplication">Saved application</label><div class="inline-control"><select id="savedApplication"><option value="">New application</option></select><button id="refreshApplications" class="quiet" type="button" aria-label="Refresh applications">Refresh</button></div><button id="extractBtn" class="secondary hidden" type="button">Save job from this page</button><p class="hint">Or enter the job details yourself.</p><label for="draftRole">Job role</label><input id="draftRole" maxlength="300" placeholder="e.g. Product engineer"><label for="draftCompany">Company</label><input id="draftCompany" maxlength="300" placeholder="Company name"><label for="draftUrl">Job URL</label><input id="draftUrl" type="url" placeholder="https://…"><details><summary>Job description</summary><label class="sr-only" for="draftDescription">Job description</label><textarea id="draftDescription" maxlength="30000" rows="6"></textarea></details><details id="result" class="hidden"><summary>Saved job details</summary><dl><dt>Role</dt><dd id="jobRole"></dd><dt>Company</dt><dd id="companyName"></dd><dt>Description</dt><dd id="jobDescription"></dd><dt>About the company</dt><dd id="companyDescription"></dd><dt>Deadline</dt><dd id="finalDate"></dd><dt>Stage</dt><dd id="statusBadge"></dd></dl></details><button class="secondary" id="goReview" type="button">Continue to answer review →</button></section>
+<section id="view-review" role="tabpanel" aria-labelledby="tab-review" data-panel="review" hidden><h2>Know what goes into every answer.</h2><p>Find suggestions, check their sources, then choose what to fill.</p><details><summary>AI drafting options</summary><label class="check-label"><input id="enableDrafts" type="checkbox"> Generate drafts for written questions</label><p class="hint">Optional. Sends question labels and relevant resume sections to Groq. Check every claim before using a draft.</p></details><button id="scanBtn" class="secondary" type="button">Find answers on this page</button><p id="reviewSummary" class="hint" role="status">Your existing answers are preserved. Unsupported fields need manual input.</p><div id="answerReview"></div></section>
+<section id="view-activity" role="tabpanel" aria-labelledby="tab-activity" data-panel="activity" hidden><h2>Filled is not submitted.</h2><p>Review the employer’s form and submit it yourself. Then record the result here.</p><button id="confirmSubmissionBtn" class="secondary" type="button" disabled>I submitted this application</button><details><summary>Watch for a submission confirmation</summary><p class="hint">On supported forms, Applyr can recognize a success message after you submit. Save your draft first.</p><button id="watchSubmissionBtn" class="secondary" type="button">Start watching this application</button><button id="stopSubmissionWatch" class="quiet" type="button">Stop watching</button><p id="submissionWatchState" role="status">Detection is off. It never submits the form.</p></details><p class="hint">Only saved reviewed answers appear in the tracker. Edits made directly on the employer’s website are not captured.</p></section>
+</main>
+<footer class="action-bar"><p id="draftState" role="status">New draft · not saved to tracker</p><p id="sessionState" class="hint" role="status">Unsaved edits are kept for this browser session, until sign-out.</p><div class="action-buttons"><button id="saveDraftBtn" class="secondary" type="button">Save draft</button><button id="applyBtn" class="btn-primary" type="button" disabled>Fill reviewed answers</button></div><p class="hint">You review. You submit. Applyr never submits for you.</p></footer>
+</section>
+<script src="popup.js"></script><script src="tracking.js"></script><script src="autofill.js"></script><script src="submission.js"></script><script src="workspace.js"></script></body></html>

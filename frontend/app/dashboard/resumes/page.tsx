@@ -5,6 +5,8 @@ import { DashboardLayout } from '@/components/layouts/dashboard-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
   Upload, Trash2, FileText, X, ChevronRight,
   Save, Plus, Loader2, AlertCircle, CheckCircle2
@@ -67,6 +69,7 @@ function TagInput({ values, onChange, placeholder }: { values: string[]; onChang
 // ── Resume Editor ─────────────────────────────────────────────────────────────
 
 function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: () => void; onSaved: (updated: Resume) => void }) {
+  const opener = useRef<HTMLElement | null>(typeof document !== 'undefined' ? document.activeElement as HTMLElement : null)
   const content: ResumeContent = resume.resume_content?.[0] ?? {
     id: '', resume_id: resume.id, summary: '', skills: [], experience: [], education: [],
     projects: [], certifications: [], achievements: [], languages: []
@@ -83,6 +86,24 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
     achievements: content.achievements ?? [],
     languages: content.languages ?? [],
   })
+  const [savedForm, setSavedForm] = useState(() => JSON.stringify(form))
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewBusy, setPreviewBusy] = useState(false)
+  const dirty = JSON.stringify(form) !== savedForm
+  const requestClose = () => { if (saving) return; if (dirty) setDiscardOpen(true); else onClose() }
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = '' } }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+  async function loadOriginal() {
+    setPreviewBusy(true); setPreviewError(null)
+    try { setPreviewUrl((await resumesApi.getPreviewUrl(resume.id)).url) }
+    catch (error) { setPreviewError(error instanceof Error ? error.message : 'Could not load the original.') }
+    finally { setPreviewBusy(false) }
+  }
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
@@ -93,11 +114,11 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
     try {
       const result = await resumesApi.updateResume(resume.id, form)
       setToast({ type: 'success', msg: 'Resume updated successfully!' })
-      setTimeout(() => setToast(null), 3000)
+      setSavedForm(JSON.stringify(form))
       onSaved({ ...resume, resume_content: [result.data] })
     } catch (error) {
       setToast({ type: 'error', msg: error instanceof Error ? error.message : 'Failed to save. Please try again.' })
-      setTimeout(() => setToast(null), 3000)
+
     } finally {
       setSaving(false)
     }
@@ -128,16 +149,19 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
   const removeCert = (i: number) => set('certifications', (form.certifications ?? []).filter((_, j) => j !== i))
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="relative ml-auto w-full max-w-2xl bg-card border-l border-border h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+    <><Sheet open onOpenChange={open => { if (!open) requestClose() }}><SheetContent onCloseAutoFocus={event => { event.preventDefault(); opener.current?.focus() }} className="w-full sm:max-w-5xl flex-row gap-0 p-0" onInteractOutside={e => { if (saving) e.preventDefault() }}>
+      <aside className="hidden md:flex w-[40%] flex-col bg-secondary/40 border-r p-5 gap-4">
+        <h3 className="font-semibold">Original document</h3><p className="text-sm text-muted-foreground">Compare the source with your saved autofill facts. Edits here do not rewrite the original file.</p>
+        <Button variant="outline" onClick={loadOriginal} disabled={previewBusy}>{previewBusy ? 'Loading…' : previewUrl ? 'Refresh original link' : 'Load original'}</Button>
+        {previewError && <p role="alert" className="text-sm text-destructive">{previewError}</p>}
+        {previewUrl && (resume.filetype.toLowerCase() === 'pdf' ? <iframe title="Original resume PDF" src={previewUrl} className="w-full flex-1 rounded border bg-white" /> : <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline text-sm">Open original document ↗</a>)}
+      </aside>
+      <div className="min-w-0 flex-1 bg-card h-full flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/80 backdrop-blur sticky top-0 z-10">
+        <div className="flex items-center justify-between px-6 pr-12 py-4 border-b border-border bg-card/80 backdrop-blur sticky top-0 z-10">
           <div>
-            <h2 className="font-display text-lg font-bold text-foreground">{resume.filename}</h2>
+            <SheetTitle className="font-display text-lg font-semibold">{resume.filename}</SheetTitle>
+            <SheetDescription>{dirty ? "Unsaved changes" : "Saved resume facts"} · Used when this resume is selected</SheetDescription>
             <p className="text-xs text-muted-foreground mt-0.5">Uploaded {formatDate(resume.created_at)}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -145,15 +169,13 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {saving ? 'Saving…' : 'Save'}
             </Button>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
-              <X size={18} />
-            </button>
+
           </div>
         </div>
 
         {/* Toast */}
         {toast && (
-          <div className={`mx-6 mt-4 flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium animate-in fade-in ${
+          <div role="status" className={`mx-6 mt-4 flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium animate-in fade-in ${
             toast.type === 'success' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'
           }`}>
             {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
@@ -164,13 +186,14 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
 
+          <div className="md:hidden space-y-2"><Button variant="outline" onClick={loadOriginal} disabled={previewBusy}>Get original document link</Button>{previewUrl && <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="block text-sm text-primary underline">Open original document ↗</a>}{previewError && <p role="alert" className="text-destructive text-sm">{previewError}</p>}</div>
           {/* Summary */}
           <section className="space-y-3">
             <h3 className="text-sm font-semibold">Contact details for autofill</h3>
             <p className="text-xs text-muted-foreground">Check extracted details and save corrections. The extension asks you to review each answer before filling it.</p>
             {(['name', 'first_name', 'last_name', 'email', 'phone_number', 'location', 'linkedin', 'github', 'portfolio'] as const).map(key => (
               <label key={key} className="block text-sm">
-                {key.replaceAll('_', ' ')}
+                {{name: 'Full name', first_name: 'First name', last_name: 'Last name', email: 'Email', phone_number: 'Phone number', location: 'Location', linkedin: 'LinkedIn', github: 'GitHub', portfolio: 'Portfolio'}[key]}
                 <Input value={form.contact?.[key] ?? ''}
                   onChange={event => set('contact', { ...form.contact, [key]: event.target.value })} />
               </label>
@@ -204,7 +227,7 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
                 <div key={i} className="border border-border rounded-xl p-4 space-y-3 bg-secondary/20">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-semibold text-muted-foreground">Entry {i + 1}</span>
-                    <button onClick={() => removeExp(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
+                    <button aria-label={`Remove experience ${i + 1}`} onClick={() => removeExp(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Input value={exp.company ?? ''} onChange={e => updateExp(i, 'company', e.target.value)} placeholder="Company" className="text-sm" />
@@ -238,7 +261,7 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
                 <div key={i} className="border border-border rounded-xl p-4 space-y-3 bg-secondary/20">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-semibold text-muted-foreground">Entry {i + 1}</span>
-                    <button onClick={() => removeEdu(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
+                    <button aria-label={`Remove education ${i + 1}`} onClick={() => removeEdu(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Input value={edu.institution ?? ''} onChange={e => updateEdu(i, 'institution', e.target.value)} placeholder="Institution" className="text-sm col-span-2" />
@@ -263,7 +286,7 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
                 <div key={i} className="border border-border rounded-xl p-4 space-y-3 bg-secondary/20">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-semibold text-muted-foreground">Project {i + 1}</span>
-                    <button onClick={() => removeProj(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
+                    <button aria-label={`Remove project ${i + 1}`} onClick={() => removeProj(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
                   </div>
                   <Input value={proj.title ?? ''} onChange={e => updateProj(i, 'title', e.target.value)} placeholder="Project title" className="text-sm" />
                   <textarea
@@ -297,7 +320,7 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
                 <div key={i} className="border border-border rounded-xl p-4 bg-secondary/20">
                   <div className="flex justify-between items-center mb-3">
                     <span className="text-xs font-semibold text-muted-foreground">Cert {i + 1}</span>
-                    <button onClick={() => removeCert(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
+                    <button aria-label={`Remove certification ${i + 1}`} onClick={() => removeCert(i)} className="text-muted-foreground hover:text-destructive transition-colors"><X size={14} /></button>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <Input value={cert.name ?? ''} onChange={e => updateCert(i, 'name', e.target.value)} placeholder="Certification name" className="text-sm col-span-2" />
@@ -322,7 +345,8 @@ function ResumeEditor({ resume, onClose, onSaved }: { resume: Resume; onClose: (
           </section>
         </div>
       </div>
-    </div>
+    </SheetContent></Sheet>
+    <Dialog open={discardOpen} onOpenChange={setDiscardOpen}><DialogContent><DialogTitle>Discard your changes?</DialogTitle><DialogDescription>Your saved resume will stay as it was. The changes you just made will be lost.</DialogDescription><div className="flex gap-3 justify-end"><Button variant="outline" onClick={() => setDiscardOpen(false)}>Keep editing</Button><Button variant="destructive" onClick={onClose}>Discard changes</Button></div></DialogContent></Dialog></>
   )
 }
 
@@ -489,8 +513,7 @@ export default function ResumesPage() {
             resumes.map(resume => (
               <Card
                 key={resume.id}
-                className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-4 hover:border-primary/40 hover:shadow-md transition-all duration-200 cursor-pointer group"
-                onClick={() => setSelected(resume)}
+                className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-primary/40 hover:shadow-md transition-all duration-200 group"
               >
                 <div className="flex items-center gap-4 flex-1 min-w-0">
                   <FileIcon type={resume.filetype} />

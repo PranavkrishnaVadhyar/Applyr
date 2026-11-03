@@ -7,7 +7,7 @@ class FormField(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=100)
     label: str = Field(max_length=500)
-    type: Literal["text", "email", "tel", "url", "textarea", "select-one"] = "text"
+    type: Literal["text", "email", "tel", "url", "textarea", "select-one", "radio", "combobox"] = "text"
     options: list[str] = Field(default_factory=list, max_length=200)
     has_value: bool = False
 

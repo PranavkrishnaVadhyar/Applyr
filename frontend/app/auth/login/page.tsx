@@ -43,7 +43,7 @@ export default function LoginPage() {
   return (
     <AuthLayout>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 animate-slide-in-up">
-        <h2 className="text-2xl font-bold text-foreground mb-6 tracking-tight">Sign In to Your Account</h2>
+        <h2 className="text-2xl font-bold text-foreground mb-6 tracking-tight">Welcome back</h2>
 
         {error && (
           <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/50 animate-scale-in">
@@ -58,6 +58,7 @@ export default function LoginPage() {
           </Label>
           <Input
             id="email"
+            autoComplete="username"
             type="email"
             placeholder="you@example.com"
             className="w-full"
@@ -74,6 +75,7 @@ export default function LoginPage() {
           </Label>
           <Input
             id="password"
+            autoComplete="current-password"
             type="password"
             placeholder="••••••••"
             className="w-full"
@@ -82,16 +84,6 @@ export default function LoginPage() {
           {errors.password && (
             <p className="text-xs text-destructive mt-1">{errors.password.message}</p>
           )}
-        </div>
-
-        <div className="flex items-center justify-between text-sm">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded border border-border" />
-            <span className="text-muted-foreground">Remember me</span>
-          </label>
-          <Link href="/auth/forgot-password" className="text-primary hover:underline">
-            Forgot password?
-          </Link>
         </div>
 
         <Button

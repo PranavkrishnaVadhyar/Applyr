@@ -17,11 +17,11 @@ async function request(message) {
 }
 
 async function updateSession() {
-  const { signedIn } = await request({ action: "session" });
+  const { signedIn, userId } = await request({ action: "session" });
   loginForm.classList.toggle("hidden", signedIn);
   logoutBtn.classList.toggle("hidden", !signedIn);
   extractBtn.classList.toggle("hidden", !signedIn);
-  document.dispatchEvent(new CustomEvent("applyrSession", { detail: { signedIn } }));
+  document.dispatchEvent(new CustomEvent("applyrSession", { detail: { signedIn, userId } }));
 }
 
 loginForm.addEventListener("submit", async (event) => {
@@ -70,7 +70,7 @@ extractBtn.addEventListener("click", async () => {
   } catch (error) { showStatus(error.message, "error"); }
   finally {
     extractBtn.disabled = false;
-    extractBtn.textContent = "Extract Job";
+    extractBtn.textContent = "Save job from this page";
     await updateSession();
   }
 });

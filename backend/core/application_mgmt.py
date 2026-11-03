@@ -4,10 +4,16 @@ from uuid import UUID
 from uuid import uuid4
 from supabase import Client
 
+class ExtractionConfigurationError(RuntimeError):
+    pass
+
 async def extract_application_fields(input_text: str) -> ApplicationExtract:
     """
     Takes raw job text and returns structured application fields
     """
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise ExtractionConfigurationError("GROQ_API_KEY is not configured")
     from langchain_core.output_parsers import PydanticOutputParser
     from langchain_core.prompts import PromptTemplate
     parser = PydanticOutputParser(pydantic_object=ApplicationExtract)
@@ -43,7 +49,7 @@ async def extract_application_fields(input_text: str) -> ApplicationExtract:
     )
     from langchain_groq import ChatGroq
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0,
-                   groq_api_key=os.environ["GROQ_API_KEY"], timeout=30, max_retries=1)
+                   groq_api_key=api_key, timeout=30, max_retries=1)
     chain = prompt | llm | parser
     return await chain.ainvoke({"input_text": input_text})
 

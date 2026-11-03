@@ -93,8 +93,8 @@ export default function ProfilePage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Profile Settings</h1>
-            <p className="text-muted-foreground mt-1">Manage your public profile information</p>
+            <h1 className="font-display text-3xl font-bold text-foreground">Account profile</h1>
+            <p className="text-muted-foreground mt-1">Your account information. Autofill uses your selected resume, not these fields.</p>
           </div>
           <Button className="bg-primary text-primary-foreground font-medium hover:brightness-95 gap-2" onClick={handleSave} disabled={isSaving}>
             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
@@ -102,6 +102,7 @@ export default function ProfilePage() {
           </Button>
         </div>
 
+        <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">To correct answers used by autofill, edit the selected resume in the resume library. Profile changes are not automatically copied to resumes.</p>
         {error && (
           <div className="p-4 bg-destructive/10 text-destructive rounded-md">
             {error}

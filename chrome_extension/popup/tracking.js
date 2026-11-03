@@ -39,6 +39,7 @@ function trackingControls() {
   if (typeof reviewedAnswers !== "undefined") for (const item of reviewedAnswers) {
     item.input.disabled = trackingBusy; item.select.disabled = trackingBusy;
   }
+  if (typeof updateWorkspace === "function") updateWorkspace();
 }
 function selectApplication(application) {
   trackingGeneration++;
@@ -110,7 +111,7 @@ saveDraftBtn.addEventListener("click", async () => {
     if (generation !== trackingGeneration) return;
     selectedResumeId = draft.resume_id;
     trackingSaved = true;
-    draftState.textContent = `Draft saved with ${app.response.answers.length} reviewed answers. Reopen it from the saved application list.`;
+    draftState.textContent = `Saved to tracker · ${app.response.answers.length} reviewed answers`;
     await refreshApplications(app.id);
   } catch (error) { showStatus(error.message, "error"); }
   finally { trackingBusy = false; trackingControls(); }
