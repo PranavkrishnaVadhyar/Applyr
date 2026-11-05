@@ -1,4 +1,5 @@
-const API_URL = "http://127.0.0.1:8000";
+if (typeof importScripts === "function") importScripts("config.js");
+const API_URL = globalThis.APPLYR_API_URL || "https://applyr-backend.vercel.app";
 let refreshPromise = null;
 
 async function readResponse(response) {

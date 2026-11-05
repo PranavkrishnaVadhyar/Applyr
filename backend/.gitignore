@@ -129,3 +129,6 @@ tmp/
 
 **/vector_db/
 app/database/vector_db/chroma.sqlite3
+
+
+/tests/
