@@ -48,7 +48,7 @@ async def extract_application_fields(input_text: str) -> ApplicationExtract:
         }
     )
     from langchain_groq import ChatGroq
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0,
+    llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0,
                    groq_api_key=api_key, timeout=30, max_retries=1)
     chain = prompt | llm | parser
     return await chain.ainvoke({"input_text": input_text})

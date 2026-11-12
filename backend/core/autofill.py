@@ -65,7 +65,7 @@ class Draft(BaseModel):
 
 async def generate_draft(question, evidence):
     from langchain_groq import ChatGroq
-    model = ChatGroq(model=os.getenv("AUTOFILL_MODEL", "llama-3.3-70b-versatile"),
+    model = ChatGroq(model=os.getenv("AUTOFILL_MODEL", "openai/gpt-oss-120b"),
                      temperature=0, max_tokens=700, timeout=12, max_retries=0)
     prompt = (
         "Draft a concise first-person job application answer using ONLY the supplied resume evidence. "
