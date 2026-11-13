@@ -43,6 +43,16 @@ test('preserves values entered after scan and rejects changed fields', () => {
   assert.equal(s.elements[0].value, 'user@example.com'); assert.equal(s.elements[1].value, '')
 })
 
+test('fill results explain why an existing answer was not overwritten', () => {
+  const s = setup(); s.scan(); s.elements[0].value = 'already@example.com'
+  const result = s.apply([{ field_id: '0', value: 'new@example.com' }, { field_id: '1', value: 'Test Candidate' }])
+  assert.equal(result.filled, 1)
+  assert.equal(result.skipped, 1)
+  assert.match(result.results[0].reason, /existing value was preserved/)
+  assert.equal(result.results[1].status, 'filled')
+  assert.equal(s.elements[1].value, 'Test Candidate')
+})
+
 test('reads adjacent unassociated labels but does not borrow another field label', () => {
   const s = setup()
   s.elements[0].label = ''

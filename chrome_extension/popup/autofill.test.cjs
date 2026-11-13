@@ -20,7 +20,7 @@ test('review is opt-in, editing revokes confirmation, and only reviewed answers 
   document.createElement = tag => new Node(tag)
   document.createTextNode = text => text
   const messages = []
-  let rejectSave = false
+  let saveCalls = 0
   const chrome = {
     tabs: { query: async () => [{ id: 1, url: 'https://example.com/apply' }], sendMessage: async (_id, message) => {
       messages.push(message)
@@ -30,7 +30,7 @@ test('review is opt-in, editing revokes confirmation, and only reviewed answers 
   const request = async message => message.action === 'listResumes' ? [{ id: 'resume', filename: 'Test.pdf' }]
     : { results: [{ field_id: '0', value: 'test@example.com', reason: 'Saved fact', evidence: [{ id: 'contact:email', text: 'test@example.com' }] }] }
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'autofill.js'), 'utf8'), { document, chrome, request, CustomEvent, showStatus() {},
-    saveCurrentDraft: async () => { if (rejectSave) throw new Error('Save failed') } })
+    saveCurrentDraft: async () => { saveCalls++; throw new Error('Save failed') } })
   await document.fire('applyrSession', { detail: { signedIn: true } })
   await new Promise(setImmediate)
   nodes.resumeSelect.value = 'resume'
@@ -47,12 +47,12 @@ test('review is opt-in, editing revokes confirmation, and only reviewed answers 
   input.value = 'corrected@example.com'; await input.fire('input')
   assert.equal(checkbox.checked, false); assert.equal(nodes.applyBtn.disabled, true)
   checkbox.checked = true; await checkbox.fire('change')
-  rejectSave = true; await nodes.applyBtn.fire('click')
-  assert.equal(messages.filter(item => item.action === 'applyAnswers').length, 0)
+  await nodes.applyBtn.fire('click')
+  assert.equal(messages.filter(item => item.action === 'applyAnswers').length, 1)
+  assert.equal(saveCalls, 0, 'webpage filling must not depend on backend saving')
   assert.equal(input.value, 'corrected@example.com')
   assert.equal(nodes.answerReview.children.length, 1)
-  rejectSave = false; await nodes.applyBtn.fire('click')
   assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-1).answers)), [{ field_id: '0', value: 'corrected@example.com' }])
   assert.equal(nodes.applyBtn.disabled, true)
-  assert.equal(nodes.answerReview.children.length, 0)
+  assert.equal(nodes.answerReview.children.length, 1, 'keep answer text after filling')
 })

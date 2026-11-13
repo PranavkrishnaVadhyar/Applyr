@@ -70,7 +70,7 @@ scanBtn.addEventListener("click", async () => {
   finally { scanning = false; scanBtn.disabled = false; scanBtn.textContent = "Find questions on this page"; if (typeof renderFlow === "function") renderFlow(); }
 });
 document.getElementById("generateBtn").addEventListener("click", async () => {
-  if (!activeScan || scanning) return;
+  if (!activeScan || activeScan.consumed || scanning) return;
   if (!resumeSelect.value) { showStatus("Choose a resume in Job details before generating answer drafts.", "error"); return; }
   if (typeof retainReviewedAnswers === "function") retainReviewedAnswers();
   const scan = activeScan, version = sessionVersion, revision = reviewVersion, resumeId = resumeSelect.value;
@@ -128,8 +128,9 @@ document.getElementById("generateBtn").addEventListener("click", async () => {
     }
     const summary = document.getElementById("reviewSummary");
     if (summary) summary.textContent = `${data.results.filter(item => item.value != null).length} suggestions · ${data.results.filter(item => item.status === "unresolved").length} need your answer · ${data.results.filter(item => item.status === "skipped").length} existing answers preserved`;
-    if (typeof saveCurrentDraft === "function") await saveCurrentDraft();
-    showStatus("Answers prepared and saved as drafts. Review them before filling the webpage.");
+    if (typeof retainReviewedAnswers === "function") retainReviewedAnswers();
+    if (typeof updateWorkspace === "function") updateWorkspace();
+    showStatus("Answers are ready. Check each answer you reviewed, then click Fill webpage. Save draft separately to keep them in your tracker.");
   } catch (error) { showStatus(error.message, "error"); }
   finally {
     scanning = false; scanBtn.disabled = false;
@@ -141,29 +142,38 @@ document.getElementById("generateBtn").addEventListener("click", async () => {
 });
 function updateApply() {
   const count = reviewedAnswers.filter(item => item.select.checked && item.input.value.trim()).length;
-  applyBtn.disabled = scanning || !activeScan || !count;
-  applyBtn.textContent = count ? `Fill webpage (${count})` : "Fill webpage";
+  applyBtn.disabled = scanning || !activeScan || activeScan.consumed || !count;
+  applyBtn.textContent = count ? `Fill webpage (${count})` : "Review an answer to enable filling";
 }
 applyBtn.addEventListener("click", async () => {
   if (scanning) return;
   applyBtn.disabled = true;
   const revision = reviewVersion, version = sessionVersion, scan = activeScan;
   try {
-    if (!scan) throw new Error("Scan the form again.");
-    const answers = reviewedAnswers.filter(item => item.select.checked).map(item => ({ field_id: item.field_id, value: item.input.value }));
+    if (!scan || scan.consumed) throw new Error("Find questions again before another fill attempt. Your answer text is still available to save or copy.");
+    const answers = reviewedAnswers.filter(item => item.select.checked && item.input.value.trim()).map(item => ({ field_id: item.field_id, value: item.input.value }));
+    if (!answers.length) throw new Error("Check ‘I reviewed this answer’ for at least one answer before filling.");
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (revision !== reviewVersion || version !== sessionVersion) return;
     if (tab?.id !== scan.tabId || tab.url !== scan.url) throw new Error("Page changed. Scan the form again.");
-    if (typeof saveCurrentDraft === "function") await saveCurrentDraft();
     const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (revision !== reviewVersion || version !== sessionVersion || currentTab?.id !== scan.tabId || currentTab.url !== scan.url) throw new Error("Page changed. Scan questions again.");
     const result = await chrome.tabs.sendMessage(tab.id, { action: "applyAnswers", scan_id: scan.scan_id, answers });
     if (revision !== reviewVersion || version !== sessionVersion) return;
     if (!result || result.error) throw new Error(result?.error || "Page unavailable. Scan again.");
     if (typeof retainReviewedAnswers === "function") retainReviewedAnswers();
-    clearReview();
+    // Keep answer text visible for copying/saving even when a field cannot be filled.
+    activeScan.consumed = true; applyBtn.disabled = true;
+    document.getElementById("generateBtn").disabled = true;
+    for (const item of reviewedAnswers) {
+      const outcome = result.results?.find(entry => entry.field_id === item.field_id);
+      if (!outcome) continue;
+      const feedback = document.createElement("p"); feedback.className = "hint";
+      feedback.textContent = outcome.status === "filled" ? "Filled on the webpage" : `Not filled: ${outcome.reason}`;
+      item.input.parentElement?.append(feedback);
+    }
     if (typeof updateWorkspace === "function") updateWorkspace();
-    showStatus(`Filled ${result.filled}; skipped ${result.skipped}. Review the page before submitting.`, "success");
-    document.dispatchEvent(new CustomEvent("applyrFilled", { detail: result }));
+    showStatus(`Filled ${result.filled}; skipped ${result.skipped}. ${result.skipped ? "See the reason beside each answer. Find questions again to retry; your answers are kept." : "Check the webpage before submitting. Save draft if you want to keep these answers."}`, result.filled ? "success" : "error");
+    if (!result.skipped && result.filled) document.dispatchEvent(new CustomEvent("applyrFilled", { detail: result }));
   } catch (error) { showStatus(error.message, "error"); updateApply(); }
 });
