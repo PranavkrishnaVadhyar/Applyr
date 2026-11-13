@@ -1,18 +1,18 @@
 // Keep one primary task visible at a time; tabs remain available for going back.
 function renderFlow() {
   const current = document.querySelector('[data-view][aria-selected="true"]')?.dataset.view || 'job';
-  const ready = !!resumeSelect.value && !trackingBusy && !scanning;
+  const ready = !!resumeSelect.value && !!draftInputs[0].value.trim() && !!draftInputs[1].value.trim() && !trackingBusy && !scanning;
   document.getElementById('goReview').disabled = !ready;
   applyBtn.hidden = current !== 'review';
-  saveDraftBtn.hidden = current !== 'activity';
+  saveDraftBtn.hidden = false;
   document.getElementById('nextActionHint').textContent = current === 'job'
-    ? 'Choose a resume, then find answers on the active form.'
+    ? 'Save these job details as a draft, or proceed to answering.'
     : current === 'review' ? 'Check the answers you want to fill. Unchecked answers stay untouched.'
     : 'Finish on the website. Save a tracker draft if you want to keep your progress.';
 }
 document.getElementById('goReview').addEventListener('click', () => {
-  if (!resumeSelect.value || trackingBusy || scanning) return;
-  renderFlow();
+  if (!resumeSelect.value || trackingBusy || scanning || !draftInputs[0].value.trim() || !draftInputs[1].value.trim()) return;
+  selectView('review'); renderFlow();
   scanBtn.click();
 });
 document.getElementById('reviewAgain').addEventListener('click', () => {
@@ -25,10 +25,6 @@ saveDraftBtn.addEventListener('click', () => {
     // The save handler temporarily locks fields; reveal the required details.
     document.getElementById('trackerDetails').scrollIntoView({ block: 'nearest' });
   }
-});
-document.addEventListener('applyrSavedJob', () => {
-  document.getElementById('trackerDetails').open = true;
-  selectView('activity');
 });
 document.addEventListener('applyrViewChanged', renderFlow);
 document.addEventListener('applyrResumesLoaded', () => {

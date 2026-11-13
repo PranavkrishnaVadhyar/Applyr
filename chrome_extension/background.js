@@ -80,6 +80,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return { signedIn: false };
     }
     if (message.action === "saveJob") return authorizedRequest("/api/applications/extract", { text: message.text });
+    if (message.action === "structureJob") return authorizedRequest("/api/applications/structure", { text: message.text });
     if (["saveWorkspace", "loadWorkspace"].includes(message.action)) {
       const { session } = await chrome.storage.session.get("session");
       if (!session?.user_id || session.user_id !== message.owner) throw new Error("Session changed. Reopen the workspace.");

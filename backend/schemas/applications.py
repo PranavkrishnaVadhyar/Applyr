@@ -14,7 +14,7 @@ class ApplicationExtract(BaseModel):
     )
 
 class ExtensionExtractionRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=30000)
+    text: str = Field(min_length=1, max_length=120000)
 
 
 
@@ -59,14 +59,18 @@ class ReviewedAnswer(BaseModel):
     value: str = Field(min_length=1, max_length=10000)
     field_type: str = Field(max_length=30)
     page_url: HttpUrl
+    reviewed: bool = True
+    field_id: Optional[str] = Field(default=None, max_length=200)
 
 
 class ApplicationDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    resume_id: UUID
+    resume_id: Optional[UUID] = None
     job_role: str = Field(min_length=1, max_length=300)
     company_name: str = Field(min_length=1, max_length=300)
     job_description: str = Field(default="", max_length=30000)
+    company_description: Optional[str] = Field(default=None, max_length=30000)
+    final_date: Optional[date] = None
     job_url: HttpUrl
     answers: list[ReviewedAnswer] = Field(default_factory=list, max_length=100)
 

@@ -13,7 +13,7 @@ class Node {
   async fire(name, event = {}) { return this.listeners[name]?.(event) }
 }
 function setup() {
-  const ids = ['savedApplication', 'saveDraftBtn', 'confirmSubmissionBtn', 'draftState', 'draftRole', 'draftCompany', 'draftUrl', 'draftDescription', 'resumeSelect', 'scanBtn', 'extractBtn', 'refreshApplications']
+  const ids = ['savedApplication', 'saveDraftBtn', 'confirmSubmissionBtn', 'draftState', 'draftRole', 'draftCompany', 'draftUrl', 'draftDescription', 'draftCompanyDescription', 'draftDeadline', 'resumeSelect', 'scanBtn', 'extractBtn', 'refreshApplications']
   const nodes = Object.fromEntries(ids.map(id => [id, new Node()]))
   nodes.resumeSelect.value = 'resume-id'
   const document = new Node(); document.getElementById = id => nodes[id]; document.createElement = () => new Node()
@@ -41,13 +41,15 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'tracking.js'), 'utf8'), context)
   return { nodes, document, context, calls, apps, errors, fail: () => { failSave = true } }
 }
-test('save includes only reviewed answers and explicit confirmation records submission', async () => {
+test('save includes draft and reviewed answers and explicit confirmation records submission', async () => {
   const s = setup()
   await s.document.fire('applyrSession', { detail: { signedIn: true } }); await new Promise(setImmediate)
   s.nodes.draftRole.value = 'Engineer'; s.nodes.draftCompany.value = 'Example'
   await s.nodes.saveDraftBtn.fire('click')
   const saved = s.calls.find(call => call.action === 'saveApplicationDraft')
-  assert.equal(saved.draft.answers.length, 1)
+  assert.equal(saved.draft.answers.length, 2)
+  assert.equal(saved.draft.answers[0].reviewed, true)
+  assert.equal(saved.draft.answers[1].reviewed, false)
   assert.equal(saved.draft.answers[0].value, 'reviewed@example.com')
   assert.equal(s.nodes.confirmSubmissionBtn.disabled, false)
   assert.equal(s.calls.filter(call => call.action === 'confirmSubmission').length, 0)
@@ -90,7 +92,8 @@ test('reopened drafts restore answers only to matching page and labels; edits re
   assert.equal(s.nodes.confirmSubmissionBtn.disabled, true)
   s.context.reviewedAnswers[0].select.checked = false
   await s.nodes.saveDraftBtn.fire('click')
-  assert.equal(s.apps[0].response.answers.length, 0)
+  assert.equal(s.apps[0].response.answers.length, 2)
+  assert.equal(s.apps[0].response.answers[0].reviewed, false)
   await s.document.fire('applyrSession', { detail: { signedIn: false } })
   assert.equal(vm.runInContext('retainedAnswers.length', s.context), 0)
 })

@@ -3,6 +3,7 @@ import { apiClient } from './api-client'
 export interface ReviewedAnswer {
   label: string
   value: string
+  reviewed?: boolean
   field_type: string
   page_url: string
 }

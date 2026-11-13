@@ -44,12 +44,12 @@ logoutBtn.addEventListener("click", async () => {
 });
 
 function displayResult(data) {
-  document.dispatchEvent(new CustomEvent("applyrSavedJob", { detail: data }));
+  document.dispatchEvent(new CustomEvent("applyrStructuredJob", { detail: data }));
   for (const [id, key] of Object.entries({
     jobRole: "job_role", jobDescription: "job_description",
     companyName: "company_name", companyDescription: "company_description", finalDate: "final_date",
   })) document.getElementById(id).textContent = data[key] || "—";
-  document.getElementById("statusBadge").textContent = data.status;
+  document.getElementById("statusBadge").textContent = "Extracted · not saved";
   resultSection.classList.remove("hidden");
 }
 
@@ -57,21 +57,27 @@ extractBtn.addEventListener("click", async () => {
   extractBtn.disabled = true;
   extractBtn.textContent = "Extracting…";
   resultSection.classList.add("hidden");
+  const generation = trackingGeneration;
+  trackingBusy = true; trackingControls();
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !/^https?:/.test(tab.url || "")) throw new Error("Open a job posting on a website first.");
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
     const job = await chrome.tabs.sendMessage(tab.id, { action: "extractJob" });
     if (!job) throw new Error("Could not read this page. Reload it and try again.");
-    showStatus("Saving to Applyr…");
-    const text = `URL: ${job.url}\nTitle: ${job.title}\nCompany: ${job.company}\nDeadline: ${job.deadline}\nDescription: ${job.description}`;
-    displayResult(await request({ action: "saveJob", text }));
-    showStatus("Saved to Applyr.", "success");
+    const text = `URL: ${job.url}\nPage title: ${job.title}\nFull page content:\n${job.text}`;
+    if (!job.text?.trim()) throw new Error("This page has no readable text. Enter the job details manually.");
+    if (text.length > 120000) throw new Error("This page exceeds the extraction limit. Open the individual job posting or enter its details manually. Nothing was truncated or sent.");
+    showStatus("Structuring the page content…");
+    const structured = await request({ action: "structureJob", text });
+    if (generation !== trackingGeneration || !trackingSignedIn) return;
+    displayResult({ ...structured, job_url: job.url });
+    showStatus("Job details extracted. Check them, then save a draft or proceed to answering.", "success");
   } catch (error) { showStatus(error.message, "error"); }
   finally {
     extractBtn.disabled = false;
-    extractBtn.textContent = "Save job from this page";
-    await updateSession();
+    extractBtn.textContent = "Extract page with AI";
+    trackingBusy = false; trackingControls();
   }
 });
 updateSession().catch(error => showStatus(error.message, "error"));

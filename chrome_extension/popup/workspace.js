@@ -18,7 +18,7 @@ viewButtons.forEach((button, index) => {
     selectView(viewButtons[next].dataset.view); viewButtons[next].focus();
   });
 });
-document.getElementById('goReview').addEventListener('click', () => { selectView('review'); document.getElementById('scanBtn').focus(); });
+
 function unsavedAnswerFor(field, url) {
   return recoveryAnswers.find(answer => answer.label === field.label && answer.field_type === field.type && answer.page_url === url)?.value;
 }
@@ -28,7 +28,7 @@ function snapshotWorkspace() {
     recoveryAnswers = recoveryAnswers.filter(answer => !edits.some(edit => answerKey(edit) === answerKey(answer))).concat(edits).slice(-100);
   }
   return { id: trackingId, resume_id: resumeSelect.value || selectedResumeId, status: trackingStatus,
-    job_role: draftInputs[0].value, company_name: draftInputs[1].value, job_description: draftInputs[3].value,
+    job_role: draftInputs[0].value, company_name: draftInputs[1].value, job_description: draftInputs[3].value, company_description: draftInputs[4].value, final_date: draftInputs[5].value || null,
     response: { version: 1, job_url: draftInputs[2].value, answers: retainedAnswers }, pending: recoveryAnswers };
 }
 function updateWorkspace() {

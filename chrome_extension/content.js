@@ -1,37 +1,9 @@
 function extractJobDetails() {
 
-    let pageText = document.body.innerText;
+    // Read the entire rendered page, including headings, lists and tables.
+    // Do not collect input values, cookies, scripts or hidden DOM content.
+    return { text: document.body.innerText, title: document.title, url: window.location.href };
 
-    // Company name (best guess)
-    let company = document.querySelector(
-        '[class*="company"], [id*="company"], meta[property="og:site_name"]'
-    );
-
-    company = company ? company.innerText || company.content : "Not found";
-
-    // Try extracting job title
-    let title = document.querySelector("h1");
-    title = title ? title.innerText : "Unknown Title";
-
-    // Try finding deadline keywords
-    let deadlineMatch = pageText.match(
-        /(apply by|last date|deadline|closing date)[^\n]*/i
-    );
-
-    let deadline = deadlineMatch ? deadlineMatch[0] : "Not found";
-
-    // Extract main paragraphs
-    let paragraphs = [...document.querySelectorAll("p")]
-        .map(p => p.innerText)
-        .join("\n\n");
-
-    return {
-        title: title,
-        company: company,
-        deadline: deadline,
-        description: paragraphs.substring(0, 5000),
-        url: window.location.href
-    };
 }
 
 if (!globalThis.applyrExtractorInstalled) {

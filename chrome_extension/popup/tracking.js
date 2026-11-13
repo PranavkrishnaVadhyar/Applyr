@@ -2,30 +2,29 @@ const savedApplication = document.getElementById("savedApplication");
 const saveDraftBtn = document.getElementById("saveDraftBtn");
 const confirmSubmissionBtn = document.getElementById("confirmSubmissionBtn");
 const draftState = document.getElementById("draftState");
-const draftInputs = ["draftRole", "draftCompany", "draftUrl", "draftDescription"].map(id => document.getElementById(id));
+const draftInputs = ["draftRole", "draftCompany", "draftUrl", "draftDescription", "draftCompanyDescription", "draftDeadline"].map(id => document.getElementById(id));
 let savedApplications = [], trackingId = crypto.randomUUID(), retainedAnswers = [], trackingStatus = "draft";
 let trackingSignedIn = false, trackingGeneration = 0, trackingSaved = false, trackingBusy = false;
 let selectedResumeId = null;
 const answerKey = answer => JSON.stringify([answer.page_url, answer.label, answer.field_type]);
 function savedAnswerFor(field, url) {
-  return retainedAnswers.find(answer => answerKey(answer) === answerKey({ page_url: url, label: field.label, field_type: field.type }))?.value;
+  const matches = retainedAnswers.filter(answer => answerKey(answer) === answerKey({ page_url: url, label: field.label, field_type: field.type }));
+  return matches.length === 1 ? matches[0].value : undefined;
 }
 function retainReviewedAnswers() {
   if (!activeScan) return;
   const previous = JSON.stringify(retainedAnswers);
-  // Visible unchecked/edited suggestions are excluded from this saved snapshot.
+  // Save draft text too; review approval only controls writing to the webpage.
   // Answers from other pages remain available for multi-step applications.
   const currentKeys = new Set(reviewedAnswers.map(item => answerKey({ label: item.label, field_type: item.field_type, page_url: activeScan.url })));
   retainedAnswers = retainedAnswers.filter(answer => !currentKeys.has(answerKey(answer)));
-  for (const item of reviewedAnswers.filter(item => item.select.checked && item.input.value.trim())) {
-    if (reviewedAnswers.filter(other => other.label === item.label && other.field_type === item.field_type).length !== 1) continue;
-    const answer = { label: item.label, field_type: item.field_type, value: item.input.value, page_url: activeScan.url };
-    retainedAnswers = retainedAnswers.filter(old => answerKey(old) !== answerKey(answer));
+  for (const item of reviewedAnswers.filter(item => item.input.value.trim())) {
+    const answer = { label: item.label, field_type: item.field_type, field_id: item.field_id, value: item.input.value, reviewed: item.select.checked, page_url: activeScan.url };
     retainedAnswers.push(answer);
   }
   if (JSON.stringify(retainedAnswers) !== previous) {
     trackingSaved = false; confirmSubmissionBtn.disabled = true;
-    draftState.textContent = `${retainedAnswers.length} reviewed answers in memory. Save draft to keep them.`;
+    draftState.textContent = `${retainedAnswers.length} answers in memory. Save draft to keep them.`;
   }
 }
 function trackingControls() {
@@ -46,15 +45,15 @@ function selectApplication(application) {
   trackingGeneration++;
   trackingId = application?.id || crypto.randomUUID();
   trackingStatus = application?.status || "draft";
-  trackingSaved = !!application?.resume_id;
+  trackingSaved = !!application?.id;
   selectedResumeId = application?.resume_id || null;
   retainedAnswers = application?.response?.version === 1 ? application.response.answers || [] : [];
-  const values = [application?.job_role, application?.company_name, application?.response?.job_url, application?.job_description];
+  const values = [application?.job_role, application?.company_name, application?.response?.job_url, application?.job_description, application?.company_description, application?.final_date];
   draftInputs.forEach((input, i) => { input.value = values[i] || ""; });
   if (typeof clearReview === "function") clearReview();
   const resume = document.getElementById("resumeSelect");
   if (application?.resume_id) resume.value = application.resume_id;
-  draftState.textContent = application ? `${trackingStatus}: ${retainedAnswers.length} saved reviewed answers` : "New draft";
+  draftState.textContent = application ? `${trackingStatus}: ${retainedAnswers.length} saved answers` : "New draft";
   trackingControls();
 }
 async function refreshApplications(selectId = savedApplication.value) {
@@ -81,12 +80,15 @@ document.addEventListener("applyrResumesLoaded", () => {
   trackingControls();
 });
 document.addEventListener("applyrAnswersChanged", () => { trackingSaved = false; trackingControls(); });
-document.addEventListener("applyrSavedJob", async event => {
-  selectApplication(event.detail);
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (trackingId === event.detail.id) draftInputs[2].value = tab?.url || "";
-  refreshApplications(event.detail.id).catch(error => showStatus(error.message, "error"));
+document.addEventListener("applyrStructuredJob", event => {
+  const data = event.detail;
+  const values = [data.job_role, data.company_name, data.job_url, data.job_description, data.company_description, data.final_date];
+  draftInputs.forEach((input, i) => { input.value = values[i] || ""; });
+  trackingSaved = false;
+  draftState.textContent = "Extracted details · not saved yet";
+  trackingControls();
 });
+
 savedApplication.addEventListener("change", () => selectApplication(savedApplications.find(app => app.id === savedApplication.value)));
 document.getElementById("refreshApplications").addEventListener("click", () => refreshApplications().catch(error => showStatus(error.message, "error")));
 for (const input of draftInputs) input.addEventListener("input", () => { trackingSaved = false; trackingControls(); });
@@ -95,28 +97,28 @@ document.getElementById("resumeSelect").addEventListener("change", () => {
   retainedAnswers = []; trackingSaved = false; trackingControls();
   draftState.textContent = "Resume changed. Review new answers and save the draft.";
 });
-saveDraftBtn.addEventListener("click", async () => {
-  if (trackingBusy || trackingStatus !== "draft") return;
+async function saveCurrentDraft() {
+  if (trackingBusy || trackingStatus !== "draft") throw new Error("This application cannot be saved right now.");
   retainReviewedAnswers();
   const generation = trackingGeneration;
   trackingBusy = true; trackingControls();
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (generation !== trackingGeneration || !trackingSignedIn) return;
+    if (generation !== trackingGeneration || !trackingSignedIn) throw new Error("Session or application changed. Save again.");
     if (!draftInputs[2].value) draftInputs[2].value = tab?.url || "";
-    const draft = { resume_id: document.getElementById("resumeSelect").value,
+    const draft = { resume_id: document.getElementById("resumeSelect").value || null,
       job_role: draftInputs[0].value.trim(), company_name: draftInputs[1].value.trim(),
-      job_url: draftInputs[2].value, job_description: draftInputs[3].value, answers: retainedAnswers };
-    if (!draft.resume_id || !draft.job_role || !draft.company_name) throw new Error("Select a resume and enter the job role and company.");
+      job_url: draftInputs[2].value, job_description: draftInputs[3].value, company_description: draftInputs[4].value || null, final_date: draftInputs[5].value || null, answers: retainedAnswers };
+    if (!draft.job_role || !draft.company_name) throw new Error("Enter the job role and company before saving.");
     const app = await request({ action: "saveApplicationDraft", application_id: trackingId, draft });
-    if (generation !== trackingGeneration) return;
+    if (generation !== trackingGeneration) throw new Error("Application changed while saving.");
     selectedResumeId = draft.resume_id;
     trackingSaved = true;
-    draftState.textContent = `Saved to tracker · ${app.response.answers.length} reviewed answers`;
+    draftState.textContent = `Saved to tracker · ${app.response.answers.length} answers`;
     await refreshApplications(app.id);
-  } catch (error) { showStatus(error.message, "error"); }
-  finally { trackingBusy = false; trackingControls(); }
-});
+  } finally { trackingBusy = false; trackingControls(); }
+}
+saveDraftBtn.addEventListener("click", () => saveCurrentDraft().catch(error => showStatus(error.message, "error")));
 confirmSubmissionBtn.addEventListener("click", async () => {
   if (trackingBusy || !trackingSaved || trackingStatus !== "draft") return;
   trackingBusy = true; trackingControls();

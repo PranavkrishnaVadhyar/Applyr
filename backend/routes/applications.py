@@ -13,6 +13,7 @@ from schemas.applications import (
     ApplicationResponse,
     ExtensionExtractionRequest,
     ApplicationDraft,
+    ApplicationExtract,
 )
 from core.application_mgmt import ExtractionConfigurationError, extract_application_fields, create_application as core_create_application
 from core.security import get_current_user
@@ -46,19 +47,24 @@ def list_owned(current_user: UUID = Depends(get_current_user), supabase: Client 
 @router.put("/drafts/{application_id}", response_model=ApplicationResponse)
 def save_draft(application_id: UUID, payload: ApplicationDraft,
                current_user: UUID = Depends(get_current_user), supabase: Client = Depends(get_supabase)):
-    resume = supabase.table("resumes").select("id, filename").eq("id", str(payload.resume_id)).eq("user_id", str(current_user)).limit(1).execute().data
-    if not resume:
+    resume = supabase.table("resumes").select("id, filename").eq("id", str(payload.resume_id)).eq("user_id", str(current_user)).limit(1).execute().data if payload.resume_id else []
+    if payload.resume_id and not resume:
         raise HTTPException(404, "Resume not found")
+    if payload.answers and not payload.resume_id:
+        raise HTTPException(422, "Select a resume before saving answers")
     existing = supabase.table("applications").select("*").eq("id", str(application_id)).eq("user_id", str(current_user)).limit(1).execute().data
     if existing and existing[0]["status"] != "draft":
         raise HTTPException(409, "Submitted applications cannot be overwritten by a draft")
-    data = {"resume_id": str(payload.resume_id), "job_role": payload.job_role,
+    data = {"resume_id": str(payload.resume_id) if payload.resume_id else None, "job_role": payload.job_role,
             "company_name": payload.company_name, "job_description": payload.job_description,
             "status": "draft", "applied_at": None,
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "response": {"version": 1, "job_url": str(payload.job_url),
-                         "resume_filename": resume[0].get("filename"),
-                         "answers": [answer.model_dump(mode="json") for answer in payload.answers]}}
+                         "resume_filename": resume[0].get("filename") if resume else None,
+                         "answers": [answer.model_dump(mode="json", exclude_none=True) for answer in payload.answers]}}
+    for key in ("company_description", "final_date"):
+        if key in payload.model_fields_set:
+            data[key] = payload.model_dump(mode="json")[key]
     if existing:
         result = supabase.table("applications").update(data).eq("id", str(application_id)).eq("user_id", str(current_user)).eq("status", "draft").execute()
     else:
@@ -114,8 +120,8 @@ def create_application(
     return response.data[0]
 
 
-@router.post("/extract", response_model=ApplicationResponse)
-async def extract_and_create_application(
+@router.post("/structure", response_model=ApplicationExtract)
+async def structure_application(
     payload: ExtensionExtractionRequest,
     current_user: UUID = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
@@ -140,6 +146,16 @@ async def extract_and_create_application(
             detail = "The AI extraction service failed. Try again later or enter a draft manually."
         raise HTTPException(502, detail) from None
 
+    return extracted_data
+
+
+@router.post("/extract", response_model=ApplicationResponse)
+async def extract_and_create_application(
+    payload: ExtensionExtractionRequest,
+    current_user: UUID = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
+):
+    extracted_data = await structure_application(payload, current_user, supabase)
     try:
         application = await run_in_threadpool(core_create_application,
             user_id=current_user,

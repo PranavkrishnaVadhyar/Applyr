@@ -14,13 +14,13 @@ test('guided flow gates scanning, separates fill/save, and advances after fillin
     document: { getElementById: node, querySelector: () => ({ dataset: { view } }),
       addEventListener: (name, fn) => { listeners[name] = fn } },
     resumeSelect: node('resumeSelect'), scanBtn: node('scanBtn'), applyBtn: node('applyBtn'), saveDraftBtn: node('saveDraftBtn'),
-    trackingBusy: false, scanning: false,
+    trackingBusy: false, scanning: false, draftInputs: [{ value: 'Engineer' }, { value: 'Example' }],
     selectView: next => { view = next; listeners.applyrViewChanged() },
   })
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'flow.js'), 'utf8'), context)
   assert.equal(nodes.goReview.disabled, true)
   assert.equal(nodes.applyBtn.hidden, true)
-  assert.equal(nodes.saveDraftBtn.hidden, true)
+  assert.equal(nodes.saveDraftBtn.hidden, false)
   listeners.applyrSession({ detail: { signedIn: true } })
   nodes.resumeSelect.value = 'resume'; nodes.resumeSelect.options = [{}]
   listeners.applyrResumesLoaded()
@@ -28,7 +28,7 @@ test('guided flow gates scanning, separates fill/save, and advances after fillin
   view = 'review'; listeners.applyrViewChanged(); listeners['goReview:click']()
   assert.deepEqual(clicks, ['scanBtn'])
   assert.equal(nodes.applyBtn.hidden, false)
-  assert.equal(nodes.saveDraftBtn.hidden, true)
+  assert.equal(nodes.saveDraftBtn.hidden, false)
   context.scanning = true; context.renderFlow()
   assert.equal(nodes.goReview.disabled, true)
   listeners['goReview:click'](); assert.equal(clicks.length, 1)
@@ -41,11 +41,6 @@ test('guided flow gates scanning, separates fill/save, and advances after fillin
   assert.equal(view, 'review')
   listeners.applyrSession({ detail: { signedIn: true } })
   assert.equal(view, 'review', 'session refresh must preserve the current step')
-  listeners.applyrSavedJob()
-  assert.equal(view, 'activity')
-  assert.equal(nodes.trackerDetails.open, true)
-  listeners.applyrSession({ detail: { signedIn: true } })
-  assert.equal(view, 'activity', 'refresh after extraction must not hide the result')
   listeners.applyrSession({ detail: { signedIn: false } })
   assert.equal(view, 'job')
 })
