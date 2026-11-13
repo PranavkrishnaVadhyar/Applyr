@@ -33,7 +33,7 @@ function trackingControls() {
   savedApplication.disabled = trackingBusy;
   for (const input of draftInputs) input.disabled = trackingBusy || trackingStatus !== "draft";
   document.getElementById("resumeSelect").disabled = trackingBusy;
-  document.getElementById("scanBtn").disabled = trackingBusy || (typeof scanning !== "undefined" && scanning) || !document.getElementById("resumeSelect").value;
+  document.getElementById("scanBtn").disabled = trackingBusy || (typeof scanning !== "undefined" && scanning);
   document.getElementById("extractBtn").disabled = trackingBusy;
   if (typeof reviewedAnswers !== "undefined") for (const item of reviewedAnswers) {
     item.input.disabled = trackingBusy; item.select.disabled = trackingBusy;

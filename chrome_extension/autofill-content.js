@@ -14,10 +14,15 @@ if (!globalThis.applyrAutofillInstalled) {
     return result;
   }
   const label = element => {
+    // Some forms visually place a label immediately before the field but omit
+    // its `for` attribute. Use only that unambiguous adjacent label as fallback.
+    const previous = element.previousElementSibling;
+    const adjacent = previous?.tagName === "LABEL" && !previous.getAttribute("for")
+      ? previous.textContent : "";
     const labelled = (element.getAttribute("aria-labelledby") || "").split(/\s+/)
       .map(id => (element.getRootNode?.() || document).getElementById(id)?.textContent || "").join(" ").trim();
     return (Array.from(element.labels || []).map(item => item.textContent).join(" ").trim()
-      || labelled || element.getAttribute("aria-label") || element.placeholder || "").trim().slice(0, 500);
+      || labelled || element.getAttribute("aria-label") || adjacent || element.placeholder || "").trim().slice(0, 500);
   };
   const eligible = element => element.isConnected && !element.matches(":disabled") && !element.readOnly
     && element.getClientRects().length > 0 && getComputedStyle(element).visibility === "visible"

@@ -1,19 +1,19 @@
 // Keep one primary task visible at a time; tabs remain available for going back.
 function renderFlow() {
   const current = document.querySelector('[data-view][aria-selected="true"]')?.dataset.view || 'job';
-  const ready = !!resumeSelect.value && !!draftInputs[0].value.trim() && !!draftInputs[1].value.trim() && !trackingBusy && !scanning;
+  const ready = !!draftInputs[0].value.trim() && !!draftInputs[1].value.trim() && !trackingBusy && !scanning;
   document.getElementById('goReview').disabled = !ready;
   applyBtn.hidden = current !== 'review';
   saveDraftBtn.hidden = false;
   document.getElementById('nextActionHint').textContent = current === 'job'
     ? 'Save these job details as a draft, or proceed to answering.'
-    : current === 'review' ? 'Check the answers you want to fill. Unchecked answers stay untouched.'
+    : current === 'review' ? 'Open the application form → Find questions → Generate drafts → Review → Fill webpage.'
     : 'Finish on the website. Save a tracker draft if you want to keep your progress.';
 }
 document.getElementById('goReview').addEventListener('click', () => {
-  if (!resumeSelect.value || trackingBusy || scanning || !draftInputs[0].value.trim() || !draftInputs[1].value.trim()) return;
+  if (trackingBusy || scanning || !draftInputs[0].value.trim() || !draftInputs[1].value.trim()) return;
   selectView('review'); renderFlow();
-  scanBtn.click();
+  scanBtn.focus();
 });
 document.getElementById('reviewAgain').addEventListener('click', () => {
   selectView('review'); scanBtn.focus();

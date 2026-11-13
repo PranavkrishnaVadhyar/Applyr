@@ -18,7 +18,7 @@ async function loadResumes() {
     const option = document.createElement("option");
     option.value = resume.id; option.textContent = resume.filename; resumeSelect.append(option);
   }
-  scanBtn.disabled = !resumes.length;
+  scanBtn.disabled = false;
   document.dispatchEvent(new CustomEvent("applyrResumesLoaded"));
   if (!resumes.length) showStatus("Upload a resume in Applyr first.");
 }
@@ -34,16 +34,19 @@ document.addEventListener("applyrSession", event => {
 document.getElementById("reloadResumes").addEventListener("click", () => loadResumes().catch(error => showStatus(error.message, "error")));
 resumeSelect.addEventListener("change", clearReview);
 scanBtn.addEventListener("click", async () => {
-  if (scanning || !resumeSelect.value) return;
+  if (scanning) return;
   if (typeof retainReviewedAnswers === "function") retainReviewedAnswers();
   scanning = true;
   clearReview(); scanBtn.disabled = true;
-  scanBtn.textContent = "Finding answers…";
+  scanBtn.textContent = "Reading form questions…";
   if (typeof renderFlow === "function") renderFlow();
   const version = sessionVersion, revision = reviewVersion, resumeId = resumeSelect.value;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || !/^https?:/.test(tab.url || "")) throw new Error("Open an application form first.");
+    if (tab?.url?.startsWith("file:")) throw new Error('This form is opened as a local file. Serve the sample folder over HTTP and open http://localhost:5500 instead. See the sample form README.');
+    if (!tab?.id || !/^https?:/.test(tab.url || "")) throw new Error("Open an application form in a normal website tab, then click Find questions on this page.");
+    const summary = document.getElementById("reviewSummary");
+    if (summary) summary.textContent = `Reading questions from ${tab.url}`;
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["autofill-content.js"] });
     const scan = await chrome.tabs.sendMessage(tab.id, { action: "scanForm" });
     if (!scan?.fields?.length) throw new Error("No supported fields found. If this is a job listing, open its application form and scan again. Otherwise complete this page manually.");
@@ -55,14 +58,20 @@ scanBtn.addEventListener("click", async () => {
       card.append(label); review.append(card);
     }
     document.getElementById("generateBtn").disabled = false;
-    const summary = document.getElementById("reviewSummary");
-    if (summary) summary.textContent = `${scan.fields.length} questions found. Click Fill answers in extension to prepare editable answers.`;
-    showStatus("Questions found. Choose whether to include AI drafts, then fill answers in the extension.");
-  } catch (error) { showStatus(error.message, "error"); }
-  finally { scanning = false; scanBtn.disabled = !resumeSelect.value; scanBtn.textContent = "Scan questions again"; if (typeof renderFlow === "function") renderFlow(); }
+    if (summary) summary.textContent = `${scan.fields.length} questions found on ${scan.url}. Select a resume, then generate answer drafts.`;
+    showStatus("Questions are ready. Generate answer drafts next; nothing has been filled or submitted.");
+  } catch (error) {
+    const message = /Cannot access|Missing host permission|Receiving end does not exist/i.test(error.message)
+      ? "Applyr cannot read this tab yet. Click the Applyr toolbar icon on the application website, reopen the workspace, and try Find questions again."
+      : error.message;
+    const summary = document.getElementById("reviewSummary"); if (summary) summary.textContent = message;
+    showStatus(message, "error");
+  }
+  finally { scanning = false; scanBtn.disabled = false; scanBtn.textContent = "Find questions on this page"; if (typeof renderFlow === "function") renderFlow(); }
 });
 document.getElementById("generateBtn").addEventListener("click", async () => {
   if (!activeScan || scanning) return;
+  if (!resumeSelect.value) { showStatus("Choose a resume in Job details before generating answer drafts.", "error"); return; }
   if (typeof retainReviewedAnswers === "function") retainReviewedAnswers();
   const scan = activeScan, version = sessionVersion, revision = reviewVersion, resumeId = resumeSelect.value;
   scanning = true; document.getElementById("generateBtn").disabled = true; scanBtn.disabled = true; applyBtn.disabled = true;
@@ -123,9 +132,9 @@ document.getElementById("generateBtn").addEventListener("click", async () => {
     showStatus("Answers prepared and saved as drafts. Review them before filling the webpage.");
   } catch (error) { showStatus(error.message, "error"); }
   finally {
-    scanning = false; scanBtn.disabled = !resumeSelect.value;
+    scanning = false; scanBtn.disabled = false;
     document.getElementById("generateBtn").disabled = !activeScan;
-    scanBtn.textContent = "Scan questions again";
+    scanBtn.textContent = "Find questions on this page";
     if (typeof renderFlow === "function") renderFlow();
     updateApply();
   }

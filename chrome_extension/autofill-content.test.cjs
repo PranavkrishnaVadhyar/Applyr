@@ -42,6 +42,15 @@ test('preserves values entered after scan and rejects changed fields', () => {
   assert.equal(s.apply([{ field_id: '0', value: 'overwrite' }, { field_id: '1', value: 'Name' }]).skipped, 2)
   assert.equal(s.elements[0].value, 'user@example.com'); assert.equal(s.elements[1].value, '')
 })
+
+test('reads adjacent unassociated labels but does not borrow another field label', () => {
+  const s = setup()
+  s.elements[0].label = ''
+  s.elements[0].previousElementSibling = { tagName: 'LABEL', textContent: 'Email address', getAttribute: () => null }
+  assert.equal(s.scan().fields[0].label, 'Email address')
+  s.elements[0].previousElementSibling.getAttribute = () => 'another-input'
+  assert.equal(s.scan().fields.some(field => field.label === 'Email address'), false)
+})
 test('navigation, hidden fields and arbitrary field IDs cannot receive answers', () => {
   const s = setup(); s.scan(); s.location.href += '/changed'; assert.ok(s.apply([]).error)
   s.scan(); s.elements[0].hidden = true
