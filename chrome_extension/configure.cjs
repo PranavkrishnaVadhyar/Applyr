@@ -16,7 +16,15 @@ function configure(directory = __dirname, environment = process.env) {
   const envPath = path.join(directory, '.env')
   const lines = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split(/\r?\n/) : []
   const setting = lines.find(line => /^\s*API_BASE_URL\s*=/.test(line))
-  const local = setting?.slice(setting.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2')
+  const raw = setting?.slice(setting.indexOf('=') + 1).trim()
+  let local
+  if (raw?.startsWith('"') || raw?.startsWith("'")) {
+    const end = raw.indexOf(raw[0], 1)
+    if (end < 0 || !/^\s*(#.*)?$/.test(raw.slice(end + 1))) throw new Error('Invalid quoted API_BASE_URL in .env.')
+    local = raw.slice(1, end)
+  } else {
+    local = raw?.split('#', 1)[0].trim()
+  }
   const origin = backendUrl(environment.API_BASE_URL?.trim() || local || 'https://applyr-backend.vercel.app')
   const manifestPath = path.join(directory, 'manifest.json')
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))

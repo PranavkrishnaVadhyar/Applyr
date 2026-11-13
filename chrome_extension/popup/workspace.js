@@ -6,6 +6,7 @@ function selectView(view) {
     button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
   }
   for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== view;
+  document.dispatchEvent(new CustomEvent('applyrViewChanged'));
 }
 const viewButtons = Array.from(document.querySelectorAll('[data-view]'));
 viewButtons.forEach((button, index) => {

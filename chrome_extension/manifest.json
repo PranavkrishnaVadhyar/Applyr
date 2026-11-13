@@ -10,7 +10,7 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "http://localhost/*"
+    "https://applyr-backend.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"

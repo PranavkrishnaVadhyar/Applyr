@@ -3,7 +3,7 @@ const resumeSelect = document.getElementById("resumeSelect");
 const review = document.getElementById("answerReview");
 const scanBtn = document.getElementById("scanBtn");
 const applyBtn = document.getElementById("applyBtn");
-let activeScan = null, reviewedAnswers = [], sessionVersion = 0, reviewVersion = 0, signedInForFill = false;
+let activeScan = null, reviewedAnswers = [], sessionVersion = 0, reviewVersion = 0, signedInForFill = false, scanning = false;
 function clearReview() {
   reviewVersion++;
   activeScan = null; reviewedAnswers = []; review.replaceChildren(); applyBtn.disabled = true;
@@ -33,14 +33,18 @@ document.addEventListener("applyrSession", event => {
 document.getElementById("reloadResumes").addEventListener("click", () => loadResumes().catch(error => showStatus(error.message, "error")));
 resumeSelect.addEventListener("change", clearReview);
 scanBtn.addEventListener("click", async () => {
+  if (scanning || !resumeSelect.value) return;
+  scanning = true;
   clearReview(); scanBtn.disabled = true;
+  scanBtn.textContent = "Finding answers…";
+  if (typeof renderFlow === "function") renderFlow();
   const version = sessionVersion, revision = reviewVersion, resumeId = resumeSelect.value;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !/^https?:/.test(tab.url || "")) throw new Error("Open an application form first.");
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["autofill-content.js"] });
     const scan = await chrome.tabs.sendMessage(tab.id, { action: "scanForm" });
-    if (!scan?.fields?.length) throw new Error("No supported labelled fields found. Fill this form manually.");
+    if (!scan?.fields?.length) throw new Error("No supported fields found. If this is a job listing, open its application form and scan again. Otherwise complete this page manually.");
     showStatus("Finding answers…");
     const data = await request({ action: "resolveAutofill", resume_id: resumeId,
       fields: scan.fields, generate_drafts: document.getElementById("enableDrafts").checked });
@@ -92,7 +96,11 @@ scanBtn.addEventListener("click", async () => {
     if (summary) summary.textContent = `${data.results.filter(item => item.value != null).length} suggestions · ${data.results.filter(item => item.status === "unresolved").length} need your answer · ${data.results.filter(item => item.status === "skipped").length} existing answers preserved`;
     showStatus("Review the suggestions and their resume evidence.");
   } catch (error) { showStatus(error.message, "error"); }
-  finally { scanBtn.disabled = !resumeSelect.value; }
+  finally {
+    scanning = false; scanBtn.disabled = !resumeSelect.value;
+    scanBtn.textContent = "Scan this form again";
+    if (typeof renderFlow === "function") renderFlow();
+  }
 });
 function updateApply() {
   const count = reviewedAnswers.filter(item => item.select.checked && item.input.value.trim()).length;
@@ -113,6 +121,8 @@ applyBtn.addEventListener("click", async () => {
     if (!result || result.error) throw new Error(result?.error || "Page unavailable. Scan again.");
     if (typeof retainReviewedAnswers === "function") retainReviewedAnswers();
     clearReview();
+    if (typeof updateWorkspace === "function") updateWorkspace();
     showStatus(`Filled ${result.filled}; skipped ${result.skipped}. Review the page before submitting.`, "success");
+    document.dispatchEvent(new CustomEvent("applyrFilled", { detail: result }));
   } catch (error) { clearReview(); showStatus(error.message, "error"); }
 });
